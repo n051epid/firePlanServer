@@ -1,0 +1,26 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+    <h1>确认标记为退款待处理</h1>
+    <p>您确定要将以下购买标记为退款待处理吗？</p>
+    <ul>
+        <li>用户: {{ purchase.user }}</li>
+        <li>会员类型: {{ purchase.membership_type }}</li>
+        <li>购买金额: {{ purchase.amount_paid }}</li>
+        <li>购买日期: {{ purchase.purchase_date }}</li>
+    </ul>
+    
+    <h2>退款后的会员信息</h2>
+    <ul>
+        <li>当前会员结束日期: {{ current_membership_end_date }}</li>
+        <li>退款后的会员结束日期: {{ new_membership_end_date }}</li>
+        <li>建议退款金额: {{ refund_amount }}</li>
+    </ul>
+    
+    <p><strong>注意：</strong> {{ action_description }} 这将调整用户的会员资格，但不会自动执行 PayPal 退款。您需要在 PayPal 后台手动处理实际的退款操作。</p>
+    <form method="post">
+        {% csrf_token %}
+        <input type="submit" value="确认标记为退款待处理" />
+    </form>
+    <a href="{% url 'admin:fire_100UpPlan_membershippurchase_change' purchase.id %}">取消</a>
+{% endblock %}

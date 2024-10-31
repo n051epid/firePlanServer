@@ -1,0 +1,62 @@
+# Python
+*.py[cod]
+__pycache__/
+*.so
+
+# Django
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# 环境变量文件
+.env
+
+# 虚拟环境
+venv/
+env/
+ENV/
+Old_version
+PLAN-00*
+
+# IDE 相关
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 操作系统生成的文件
+.DS_Store
+Thumbs.db
+
+# 日志文件
+logs/
+
+# 静态文件收集目录
+/static/
+
+# 媒体文件
+/media/
+
+# 临时文件
+*.tmp
+*.bak
+*.swp
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# 测试覆盖率报告
+.coverage
+htmlcov/
+
+# 翻译文件
+*.mo
+*.pot
+
+# 其他
+*.pyc
+*.pyo
+*.orig
+
