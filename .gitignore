@@ -18,6 +18,7 @@ env/
 ENV/
 Old_version
 PLAN-00*
+vue-vben-admin
 
 # IDE 相关
 .idea/

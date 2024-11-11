@@ -219,6 +219,8 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "chrome-extension://gidgjoelmejkmlngjdmoeemeckhifchl",
+    "https://api.guizhenintel.com",
+    "http://localhost:5666"
 ]
 
 # 允许携带凭证（如果需要）
@@ -320,6 +322,13 @@ LOGGING = {
             'propagate': True,
         },
     },
+}
+
+# 默认用户组设置
+DEFAULT_USER_GROUPS = {
+    'NORMAL_USER': 'Basic',
+    'VIP_USER': 'Premium',
+    'ADMIN_USER': 'Admin'
 }
 
 

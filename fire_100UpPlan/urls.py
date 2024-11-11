@@ -1,17 +1,28 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from .views import RegisterView, UserInfoView, PayPalWebhookView, CreatePayPalOrderView, CapturePayPalOrderView, MembershipTypeListView, CheckPaymentStatusView, PurchaseHistoryView, PaymentSuccessView, PaymentCancelView, ActivateAccountView, GoogleLogin, get_csrf_token
+from rest_framework_simplejwt.views import TokenRefreshView
+from .views import (
+    RegisterView, UserInfoView, PayPalWebhookView, CreatePayPalOrderView,
+    CapturePayPalOrderView, MembershipTypeListView, CheckPaymentStatusView,
+    PurchaseHistoryView, PaymentSuccessView, PaymentCancelView,
+    ActivateAccountView, GoogleLogin, get_csrf_token,
+    CustomTokenObtainPairView, UserAuthCodesView, UserLogoutView,
+    ForgetPasswordView, ResetPasswordView
+)
 
 router = DefaultRouter()
 # 如果有任何 ViewSet，在这里注册，例如：
 # router.register(r'some-model', SomeModelViewSet)
 
 urlpatterns = [
-    path('register/', RegisterView.as_view(), name='register'),
-    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('user-info/', UserInfoView.as_view(), name='user_info'),
+    path('auth/register/', RegisterView.as_view(), name='register'),
+    path('auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/forget-password/', ForgetPasswordView.as_view(), name='forget_password'),
+    path('auth/reset-password/', ResetPasswordView.as_view(), name='reset_password'),
+    path('user/info/', UserInfoView.as_view(), name='user_info'),
+    path('auth/codes/', UserAuthCodesView.as_view(), name='user_auth_codes'),
+    path('auth/logout/', UserLogoutView.as_view(), name='user_logout'),
     path('membership-types/', MembershipTypeListView.as_view(), name='membership_types'),
     path('paypal-webhook/', PayPalWebhookView.as_view(), name='paypal_webhook'),
     path('create-paypal-order/', CreatePayPalOrderView.as_view(), name='create_paypal_order'),

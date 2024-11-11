@@ -6,6 +6,10 @@ from django.utils.html import format_html
 from django.utils import timezone
 from datetime import timedelta
 from .models import Membership, MembershipType, MembershipPurchase
+from django.contrib.auth.models import Group
+from django.contrib.auth.admin import GroupAdmin
+from django.contrib.auth.admin import UserAdmin
+from django.contrib.auth.models import User
 
 # Register your models here.
 
@@ -120,3 +124,36 @@ class MembershipPurchaseAdmin(admin.ModelAdmin):
     refund_button.allow_tags = True
 
     readonly_fields = ('refund_button',)
+
+# 用户组增加「用户数量」列
+class CustomGroupAdmin(GroupAdmin):
+    list_display = ('name', 'get_users_count', 'view_users')
+    
+    def get_users_count(self, obj):
+        return obj.user_set.count()
+    get_users_count.short_description = 'number of users'
+
+    def view_users(self, obj):
+        # 创建一个链接到用户列表的按钮,过滤该组的用户
+        url = f'/admin/auth/user/?groups__id__exact={obj.id}'
+        return format_html('<a href="{}">view members</a>', url)
+    view_users.short_description = 'view members'
+
+# 重新注册 Group
+admin.site.unregister(Group)
+admin.site.register(Group, CustomGroupAdmin)
+
+class CustomUserAdmin(UserAdmin):
+    # 保留原有的列
+    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'get_groups')
+    
+    def get_groups(self, obj):
+        # 获取用户组并以逗号分隔显示
+        return ", ".join([group.name for group in obj.groups.all()])
+    
+    # 设置列标题
+    get_groups.short_description = 'Groups'
+
+# 重新注册 User 模型
+admin.site.unregister(User)
+admin.site.register(User, CustomUserAdmin)

@@ -6,20 +6,17 @@ from .serializers import MembershipSerializer
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.models import User
 from .permissions import MembershipPermission
-from django.db import IntegrityError
 from rest_framework import status
 from django.utils import timezone
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 import requests
 from django.conf import settings
-from .permissions import MembershipPermission
 from .utils import verify_paypal_webhook
-from django.conf import settings
 import paypalrestsdk
 from .models import MembershipType, Membership, MembershipPurchase
 from rest_framework import generics
-from .serializers import MembershipTypeSerializer
+from .serializers import MembershipTypeSerializer, CustomTokenObtainPairSerializer
 from django.http import HttpResponse
 import json
 import logging
@@ -30,12 +27,8 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.contrib.auth.tokens import default_token_generator
-from .tasks import send_activation_email
+from .tasks import send_notification_email
 from django.shortcuts import render
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-import paypalrestsdk
 from django.utils.encoding import force_str
 from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
@@ -45,6 +38,10 @@ from django.http import JsonResponse
 import traceback
 from django.views.decorators.csrf import ensure_csrf_cookie
 from allauth.socialaccount.models import SocialAccount
+from rest_framework_simplejwt.views import TokenObtainPairView
+from .serializers import CustomTokenObtainPairSerializer
+from .serializers import UserRegistrationSerializer
+
 
 
 logger = logging.getLogger(__name__)
@@ -60,30 +57,122 @@ paypalrestsdk.configure({
 def get_csrf_token(request):
     return JsonResponse({'csrfToken': get_token(request)})
 
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
+
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        return response
+
+
+class UserAuthCodesView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        try:
+            # 这里可以根据实际需求从数据库或其他地方获取授权码
+            # 示例数据
+            auth_codes = [
+                "AC_1000001",
+                "AC_1000002"
+            ]
+            
+            response = {
+                "code": 0,
+                "data": auth_codes,
+                "error": None,
+                "message": "ok"
+            }
+            return Response(response)
+            
+        except Exception as e:
+            error_response = {
+                "code": 1,
+                "data": None,
+                "error": str(e),
+                "message": "Get Auth Codes Failed"
+            }
+            return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UserLogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # 获取用户的刷新令牌
+            refresh_token = request.data.get('refresh_token')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                # 将令牌加入黑名单
+                token.blacklist()
+            
+            response = {
+                "code": 0,
+                "data": None,
+                "error": None,
+                "message": "Logout Successful"
+            }
+            return Response(response)
+            
+        except Exception as e:
+            error_response = {
+                "code": 1,
+                "data": None,
+                "error": str(e),
+                "message": "Logout Failed"
+            }
+            return Response(error_response, status=status.HTTP_400_BAD_REQUEST)
+
+
 class RegisterView(APIView):
     authentication_classes = []  # 禁用认证
     permission_classes = []  # 禁用限检查
 
     def post(self, request):
         username = request.data.get('username')
-        email = request.data.get('email')
+        email = request.data.get('username')
         password = request.data.get('password')
+        confirmPassword = request.data.get('confirmPassword')
 
-        if not username or not email or not password:
-            return Response({"error": "Username, and Password are Required Fields."}, status=status.HTTP_400_BAD_REQUEST)
+        if not username or not password:
+            return Response({
+                "code": 1,
+                "data": None,
+                "error": "Username and Password are Required Fields.",
+                "message": "Registration Failed"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if password != confirmPassword:
+            return Response({
+                "code": 1,
+                "data": None,
+                "error": "Password and Confirm Password do not match.",
+                "message": "Registration Failed"
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user = User.objects.create_user(username=username, email=email, password=password)
-            # user.is_active = False  # 设置用户为未激活状态
-            # user.save()
+            serializer = UserRegistrationSerializer(data={
+                'username': username,
+                'email': email,
+                'password': password
+            })
+            if not serializer.is_valid():
+                # 获取第一个错误信息
+                error_msg = next(iter(serializer.errors.values()))[0] if serializer.errors else "Validation failed"
+                return Response({
+                    "code": 1,
+                    "data": None,
+                    "error": str(error_msg),  # 使用具体的错误信息
+                    "message": "Registration Failed"
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+            user = serializer.save()
 
             # 创建Free User会员资格
             free_user_type = MembershipType.objects.get(name="Free User")
             Membership.objects.create(user=user, membership_type=free_user_type)
-
-            # 授予试用会员资格
-            # trial_type = MembershipType.objects.get(name="Trial")
-            # Membership.objects.create(user=user, membership_type=trial_type)
 
             # 生成激活令牌
             active_token = default_token_generator.make_token(user)
@@ -98,23 +187,30 @@ class RegisterView(APIView):
             from_email = settings.DEFAULT_FROM_EMAIL
             recipient_list = [email]
             bcc_list = [settings.BCC_EMAIL]
-            send_activation_email.delay(subject, message, from_email, recipient_list, bcc_list)
+            send_notification_email.delay(subject, message, from_email, recipient_list, bcc_list)
 
             # 生成令牌
             refresh = RefreshToken.for_user(user)
             
             return Response({
+                "code": 0,
+                "data": {
+                    "username": serializer.data['username'],
+                    # "email": serializer.data['email'],
+                    "accessToken": str(refresh.access_token),
+                    "refreshToken": str(refresh)
+                },
                 "message": "Signup Successful, activation email has been sent.",
-                "username": user.username,
-                "email": user.email,
-                "access": str(refresh.access_token),
-                "refresh": str(refresh)
+                "error": None
             }, status=status.HTTP_201_CREATED)
         
-        except IntegrityError:
-            return Response({"error": "username or email already exists"}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({
+                "code": 1,
+                "data": None,
+                "error": str(e),
+                "message": "Registration Failed"
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 # 新增激活账户的视图
 class ActivateAccountView(APIView):
@@ -184,14 +280,29 @@ class UserInfoView(APIView):
             end_date = None
             is_active = False
 
-        data = {
-            "username": user.username,
-            "email": user.email,
-            "membership_type": membership_type,
-            "membership_end_date": end_date.isoformat() if end_date else None,
-            "is_membership_active": is_active
-        }
-        return Response(data)
+        try:
+            response = {
+                "code": 0,
+                "data": {
+                    "username": user.username,
+                    "realName": user.username.split('@')[0],
+                    "roles": list(user.groups.all().values_list('name', flat=True)),
+                    "membership_type": membership_type,
+                    "membership_end_date": end_date.isoformat() if end_date else None,
+                    "is_membership_active": is_active
+                },
+                "error": None,
+                "message": "Success"
+            }
+            return Response(response)
+        except Exception as e:
+            error_response = {
+                "code": 1,
+                "data": None,
+                "error": str(e),
+                "message": "Get User Info Failed"
+            }
+            return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # 会员功能视图
 class BasicFeatureView(APIView):
@@ -259,7 +370,7 @@ class MinimaxT2AView(APIView):
         }
 
         try:
-            # 发送请求到 MiniMax API
+            # 发送请到 MiniMax API
             response = requests.post(url, headers=headers, json=data)
             response.raise_for_status()  # 如果请求失败,会抛出异常
 
@@ -349,7 +460,7 @@ class CapturePayPalOrderView(APIView):
                 payment = paypalrestsdk.Payment.find(payment_id)
 
                 if payment.state == 'approved':
-                    # 支付已经完成，更新本地状态
+                    # 支付已经成，更新本地状态
                     if purchase.payment_status != 'COMPLETED':
                         purchase.payment_status = 'COMPLETED'
                         purchase.save()
@@ -363,7 +474,7 @@ class CapturePayPalOrderView(APIView):
                             "purchased_membership_type": purchase.membership_type.name,
                             "purchased_start_date": purchase.purchase_date,
                         },
-                        # 返回当前正在生效状态的会员信息
+                        # 返回当前正在生效态的会员信息
                         "membership":{
                             # "id": membership.id,
                             "current_membership_type": membership.membership_type.name,
@@ -620,11 +731,83 @@ class GoogleLogin(SocialLoginView):
             from_email = settings.DEFAULT_FROM_EMAIL
             recipient_list = [user.email]
             bcc_list = [settings.BCC_EMAIL]
-            send_activation_email.delay(subject, message, from_email, recipient_list, bcc_list)
+            send_notification_email.delay(subject, message, from_email, recipient_list, bcc_list)
 
             logger.info(f"New user registered via Google: {user.email}")
         except Exception as e:
             logger.error(f"Error registering new Google user: {str(e)}", exc_info=True)
+
+class ForgetPasswordView(APIView):
+    permission_classes = []  # 允许未认证用户访问
+    
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response(
+                {'error': 'please provide email address'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            user = User.objects.get(email=email)
+            # 生成重置令牌
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            
+            FRONTEND_URL = settings.CORS_ALLOWED_ORIGINS[2]
+            # 构建重置链接
+            reset_link = f"{FRONTEND_URL}/reset-password/{uid}/{token}"
+            
+            # 使用异步任务发送邮件
+            subject = 'GuizhenIntel Password Reset'
+            message = f'Please click the following link to reset your password:\n\n{reset_link}'
+            from_email = settings.DEFAULT_FROM_EMAIL
+            recipient_list = [email]
+            bcc_list = [settings.BCC_EMAIL]
+            
+            send_notification_email.delay(subject, message, from_email, recipient_list, bcc_list)
+            
+            return Response({'message': 'The password reset link has been sent to your email'})
+            
+        except User.DoesNotExist:
+            # 为了安全，即使用户不存在也返回成功消息
+            return Response({'message': 'The password reset link has been sent to your email'})
+
+class ResetPasswordView(APIView):
+    permission_classes = []  # 允许未认证用户访问
+
+    def post(self, request):
+        # 从请求中获取参数
+        uid = request.data.get('uid')
+        token = request.data.get('token')
+        new_password = request.data.get('password')
+        
+        try:
+            # 解码用户ID并验证token
+            uid = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=uid)
+            
+            if default_token_generator.check_token(user, token):
+                # 设置新密码
+                user.set_password(new_password)
+                user.save()
+                return Response({
+                    'message': 'Password has been reset successfully'
+                })
+            else:
+                return Response({
+                    'error': 'Invalid or expired reset link'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({
+                'error': 'Invalid reset link'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+
 
 
 
