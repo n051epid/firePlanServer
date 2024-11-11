@@ -100,31 +100,20 @@ class UserLogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        try:
-            # 获取用户的刷新令牌
-            refresh_token = request.data.get('refresh_token')
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                # 将令牌加入黑名单
-                token.blacklist()
+        # 获取用户的刷新令牌
+        refresh_token = request.data.get('refresh_token')
+        if refresh_token:
+            token = RefreshToken(refresh_token)
+            # 将令牌加入黑名单
+            token.blacklist()
             
-            response = {
-                "code": 0,
-                "data": None,
-                "error": None,
-                "message": "Logout Successful"
-            }
-            return Response(response)
-            
-        except Exception as e:
-            error_response = {
-                "code": 1,
-                "data": None,
-                "error": str(e),
-                "message": "Logout Failed"
-            }
-            return Response(error_response, status=status.HTTP_400_BAD_REQUEST)
-
+        response = {
+            "code": 0,
+            "data": None,
+            "error": None,
+            "message": "Logout Successful"
+        }
+        return Response(response)
 
 class RegisterView(APIView):
     authentication_classes = []  # 禁用认证
