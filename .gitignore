@@ -8,6 +8,7 @@ __pycache__/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+db.sqlite3.backup*
 
 # 环境变量文件
 .env
@@ -19,6 +20,9 @@ ENV/
 Old_version
 PLAN-00*
 vue-vben-admin
+node_modules/
+tests/
+backups/
 
 # IDE 相关
 .idea/

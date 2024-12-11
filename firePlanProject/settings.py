@@ -13,6 +13,11 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from celery.schedules import crontab
+
+# 时区设置
+USE_TZ = True
+TIME_ZONE = 'Asia/Shanghai'  # 使用北京时间
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -218,9 +223,11 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # 允许所有来源访问
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
-    "chrome-extension://gidgjoelmejkmlngjdmoeemeckhifchl",
     "https://api.guizhenintel.com",
-    "http://localhost:5666"
+    "http://fireqinglv.guizhenintel.com",
+    "https://fireqinglv.guizhenintel.com",
+    "http://localhost:5666",
+    "http://127.0.0.1:5666",
 ]
 
 # 允许携带凭证（如果需要）
@@ -247,6 +254,8 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'cache-control',
+    'connection',
 ]
 
 CSRF_TRUSTED_ORIGINS_ALLOWED = {
@@ -266,6 +275,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MINIMAX_GROUP_ID = os.environ.get('MINIMAX_GROUP_ID')
 MINIMAX_API_KEY = os.environ.get('MINIMAX_API_KEY')
 
+# Kimi API 设置
+KIMI_API_KEY = os.environ.get('KIMI_API_KEY')
+
 # 日志配置
 LOG_FILE_PATH = os.environ.get('LOG_FILE_PATH', os.path.join(BASE_DIR, 'logs', 'django_debug.log'))
 
@@ -281,10 +293,52 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_HOST_USER')
 BCC_EMAIL = os.environ.get('BCC_EMAIL')
 
+# 集思录 API 设置
+JISILU_API_COOKIE = os.environ.get('JISILU_API_COOKIE')
+
+# Celery 时区设置
+CELERY_TIMEZONE = 'Asia/Shanghai'  # Celery 也使用相同的时区
+
 # Celery 配置
 CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
 CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+# Celery Beat 定时任务配置
+CELERY_BEAT_SCHEDULE = {
+    'fetch-daily-market-data': {
+        'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
+        'schedule': crontab(hour=20, minute=00),  # 每天20:00执行
+    },
+    'fetch-index-data': {
+        'task': 'fire_100UpPlan.tasks.fetch_index_data',
+        'schedule': crontab(hour=20, minute=5),  # 每天20:05执行
+    },
+    'fetch-margin-trading-data': {
+        'task': 'fire_100UpPlan.tasks.fetch_margin_trading_data',
+        'schedule': crontab(hour=20, minute=10),  # 每天20:10执行
+    },
+    'fetch-industry-valuation-data': {
+        'task': 'fire_100UpPlan.tasks.fetch_industry_valuation_data',
+        'schedule': crontab(hour=20, minute=15),  # 每天20:15执行
+    },
+    'fetch_convertible_bond_data': {
+        'task': 'fire_100UpPlan.tasks.fetch_convertible_bond_data',
+        'schedule': crontab(hour=20, minute=20),  # 每天20:20执行
+    },
+    'fetch-bond-index-data': {
+        'task': 'fire_100UpPlan.tasks.fetch_bond_index_data',
+        'schedule': crontab(hour=20, minute=25),  # 每天20:25执行
+    },
+    'fetch-bigdata-strategy-data': {
+        'task': 'fire_100UpPlan.tasks.fetch_bigdata_strategy_data',
+        'schedule': crontab(hour=20, minute=30),  # 每天20:30执行
+    },
+    'fetch-daily-market-data2': {
+        'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
+        'schedule': crontab(hour=20, minute=35),  # 每天20:35执行
+    }
+}
 
 SITE_ID = int(os.getenv('SITE_ID', 1))
 
@@ -310,7 +364,7 @@ LOGGING = {
     'disable_existing_loggers': False,
     'handlers': {
         'file': {
-            'level': 'DEBUG',
+            'level': 'INFO',
             'class': 'logging.FileHandler',
             'filename': LOG_FILE_PATH,
         },
@@ -318,7 +372,7 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['file'],
-            'level': 'DEBUG',
+            'level': 'INFO',
             'propagate': True,
         },
     },

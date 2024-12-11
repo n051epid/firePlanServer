@@ -9,6 +9,7 @@ from .views import (
     CustomTokenObtainPairView, UserAuthCodesView, UserLogoutView,
     ForgetPasswordView, ResetPasswordView
 )
+from .views_fireplan.market_observation import KimiChatView,MarketValuationView, MarketTrendView, ConvertibleBondMarketDataView, BigDataInvestmentMarketDataView
 
 router = DefaultRouter()
 # 如果有任何 ViewSet，在这里注册，例如：
@@ -23,6 +24,7 @@ urlpatterns = [
     path('user/info/', UserInfoView.as_view(), name='user_info'),
     path('auth/codes/', UserAuthCodesView.as_view(), name='user_auth_codes'),
     path('auth/logout/', UserLogoutView.as_view(), name='user_logout'),
+    path('activate/<uidb64>/<token>/', ActivateAccountView.as_view(), name='activate_account'),
     path('membership-types/', MembershipTypeListView.as_view(), name='membership_types'),
     path('paypal-webhook/', PayPalWebhookView.as_view(), name='paypal_webhook'),
     path('create-paypal-order/', CreatePayPalOrderView.as_view(), name='create_paypal_order'),
@@ -31,9 +33,13 @@ urlpatterns = [
     path('purchase-history/', PurchaseHistoryView.as_view(), name='purchase_history'),
     path('payment/success/', PaymentSuccessView.as_view(), name='payment_success'),
     path('payment/cancel/', PaymentCancelView.as_view(), name='payment_cancel'),
-    path('activate/<uidb64>/<token>/', ActivateAccountView.as_view(), name='activate_account'),
-    path('', include(router.urls)),
     path('accounts/', include('allauth.urls')),
     path('auth/google/', GoogleLogin.as_view(), name='google_login'),
     path('csrf/', get_csrf_token, name='get_csrf_token'),
+    path('ai/chat/', KimiChatView.as_view(), name='kimi_chat'),
+    path('market/valuation/', MarketValuationView.as_view(), name='market_valuation'),
+    path('market/trend/', MarketTrendView.as_view(), name='market_trend'),
+    path('convertible-bond/cb-market-data/', ConvertibleBondMarketDataView.as_view(), name='convertible_bond_market_data'),
+    path('big-data-investment/bd-market-data/', BigDataInvestmentMarketDataView.as_view(), name='big_data_investment_market_data'),
+    path('', include(router.urls)),
 ]

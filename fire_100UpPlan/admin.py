@@ -6,30 +6,55 @@ from django.utils.html import format_html
 from django.utils import timezone
 from datetime import timedelta
 from .models import Membership, MembershipType, MembershipPurchase
-from django.contrib.auth.models import Group
-from django.contrib.auth.admin import GroupAdmin
-from django.contrib.auth.admin import UserAdmin
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group,User
+from django.contrib.auth.admin import GroupAdmin,UserAdmin
+from .models import (
+    StockData, 
+    BigDataStrategyStockData,
+    IndexData, 
+    FundData, 
+    BondData, 
+    MarketValuation,
+    MembershipType,
+    Membership,
+    MembershipPurchase,
+    MarginTradingData,
+    IndustryValuation,
+    BondIndexData
+)
+from django.utils.translation import gettext_lazy as _
 
 # Register your models here.
 
-@admin.register(Membership)
+# 会员系统分组
 class MembershipAdmin(admin.ModelAdmin):
+    """会员管理基类"""
+    
+    def get_app_list(self, request):
+        """
+        自定义会员管理分组显示
+        """
+        app_dict = self._build_app_dict(request)
+        app_dict['name'] = _('会员管理')  # 支持国际化
+        app_dict['app_label'] = 'membership'  # 设置应用标签
+        return [app_dict]
+    
+@admin.register(Membership)
+class MembershipAdmin(MembershipAdmin):
     list_display = ('user', 'membership_type', 'start_date', 'end_date', 'is_active')
     list_filter = ('membership_type', 'is_active')
     search_fields = ('user__username', 'user__email')
+    app_label = 'membership'
 
 @admin.register(MembershipType)
-class MembershipTypeAdmin(admin.ModelAdmin):
+class MembershipTypeAdmin(MembershipAdmin):
     list_display = ('name', 'duration_days', 'price', 'is_active', 'original_price', 'description')
     list_filter = ('is_active', 'has_basic_features', 'has_advanced_features')
     search_fields = ('name',)
-
-# 移除重复注册的代码
-# admin.site.register(MembershipType, MembershipTypeAdmin)
+    app_label = 'membership'
 
 @admin.register(MembershipPurchase)
-class MembershipPurchaseAdmin(admin.ModelAdmin):
+class MembershipPurchaseAdmin(MembershipAdmin):
     list_display = ['user', 'membership_type', 'payment_status', 'purchase_date', 'amount_paid', 'refund_button']
     list_filter = ['payment_status', 'purchase_date']
     search_fields = ['user__username', 'transaction_id']
@@ -124,6 +149,7 @@ class MembershipPurchaseAdmin(admin.ModelAdmin):
     refund_button.allow_tags = True
 
     readonly_fields = ('refund_button',)
+    app_label = 'membership'
 
 # 用户组增加「用户数量」列
 class CustomGroupAdmin(GroupAdmin):
@@ -157,3 +183,183 @@ class CustomUserAdmin(UserAdmin):
 # 重新注册 User 模型
 admin.site.unregister(User)
 admin.site.register(User, CustomUserAdmin)
+
+
+
+
+# 市场数据分组
+class MarketDataAdmin(admin.ModelAdmin):
+    """市场数据管理基类"""
+    
+    def get_app_list(self, request):
+        """
+        自定义应用分组显示
+        """
+        app_dict = self._build_app_dict(request)
+        app_dict['name'] = _('市场数据')  # 支持国际化
+        app_dict['app_label'] = 'market_data'  # 设置应用标签
+        return [app_dict]
+
+@admin.register(StockData)
+class StockDataAdmin(MarketDataAdmin):
+    list_display = (
+        'code', 
+        'name', 
+        'close', 
+        'pe_ratio', 
+        'pe_ttm_ratio', 
+        'pb_ratio', 
+        'industry_name',
+        'industry_code',
+        'parent_industry_code',
+        'parent_industry_pb_ratio_median',
+        'parent_industry_pe_ttm_ratio_median',
+        'total_market_value',
+        'float_market_value',
+        'sixty_day_increase',
+        'year_to_date_increase',
+    )
+    list_filter = ('industry_name', 'industry_code', 'parent_industry_code')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+
+@admin.register(BigDataStrategyStockData)
+class BigDataStrategyStockDataAdmin(MarketDataAdmin):
+    list_display = ('code', 'name', 'bigdata_score', 'close', 'one_year_min', 'pe_ratio', 'pe_ttm_ratio', 'pb_ratio', 'dividend_ratio','industry_name', 'industry_code', 'parent_industry_code', 'total_market_value', 'sixty_day_increase', 'year_to_date_increase', 'one_year_increase', 'bigdata_score_method')
+    list_filter = ('date', 'industry_name', 'industry_code', 'parent_industry_code', 'bigdata_score_method')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    ordering = ('-bigdata_score',)
+    app_label = 'market_data'
+
+@admin.register(IndexData)
+class IndexDataAdmin(MarketDataAdmin):
+    list_display = ('date', 'code', 'name', 'close', 'pe_ratio', 'pe_ttm_ratio', 'pb_ratio', 'percentile')
+    list_filter = ('date','name')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+@admin.register(FundData)
+class FundDataAdmin(MarketDataAdmin):
+    list_display = ('date', 'code', 'name', 'nav', 'acc_nav', 'daily_return', 'type')
+    list_filter = ('date', 'type')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+@admin.register(BondData)
+class BondDataAdmin(MarketDataAdmin):
+    list_display = ('code', 'name', 'close', 'redemption_countdown', 'is_callable', 'redemption_trigger_price', 'redemption_price', 'convertible_start_date', 'last_trading_date', 'stock_code', 'stock_name', 'stock_price', 'stock_pb', 'stock_industry_pb_ratio_median', 'stock_pe_ttm_ratio', 'stock_industry_pe_ttm_ratio_median', 'convertible_price', 'convertible_value', 'premium_rate', 'bond_rating', 'remaining_size', 'ytm_before_tax', 'maturity_date', 'double_low', 'listing_date')
+    list_filter = ('is_callable', 'bond_rating')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    ordering = ('premium_rate','remaining_size','double_low')
+    app_label = 'market_data'
+
+@admin.register(BondIndexData)
+class BondIndexDataAdmin(MarketDataAdmin):
+    list_display = ('date', 'code', 'name', 'price', 'increase_rt', 'avg_price', 'mid_price', 'avg_premium_rt', 'mid_premium_rt', 'avg_ytm_rt', 'price_90', 'price_90_100', 'price_100_110', 'price_110_120', 'price_120_130', 'price_130')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+@admin.register(MarketValuation)
+class MarketValuationAdmin(MarketDataAdmin):
+    list_display = ('date', 'sector_name', 'pe_ratio', 'pe_range_percentile', 'pe_ttm_ratio', 'pb_ratio', 'pb_range_percentile', 'dividend_ratio', 'stock_count', 'total_volume', 'total_amount', 'sh_index', 'sh_pe_rank_percentile', 'sh_pb_rank_percentile')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+@admin.register(MarginTradingData)
+class MarginTradingDataAdmin(MarketDataAdmin):
+    list_display = ('date', 'margin_balance', 'securities_balance', 'margin_buy', 'securities_sell', 'securities_firms', 'branches', 'individual_investors', 'institutional_investors', 'active_traders', 'margin_traders', 'collateral_value', 'maintenance_ratio')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+@admin.register(IndustryValuation)
+class IndustryValuationAdmin(admin.ModelAdmin):
+    list_display = [
+        'date',
+        'industry_code',
+        'industry_name',
+        'parent_industry',
+        'static_pe',
+        'ttm_pe',
+        'ttm_pe_min',
+        'pb_ratio',
+        'pb_ratio_min',
+        'dividend_ratio',
+        'stock_count',
+        'ttm_pe_mean',
+        'ttm_pe_std',
+        'ttm_pe_median',
+        'ttm_pe_percentiles',
+        'ttm_pe_is_normal',
+        'pb_ratio_mean',
+        'pb_ratio_std',
+        'pb_ratio_median',
+        'pb_ratio_percentiles',
+        'pb_ratio_is_normal',
+    ]
+    
+    list_filter = [
+        'date',
+        'parent_industry',
+        'industry_code',
+    ]
+
+    date_hierarchy = 'date'
+
+    search_fields = [
+        'industry_code',
+        'industry_name',
+        'parent_industry',
+    ]
+    
+    ordering = ['-date', 'industry_code']
+    
+    readonly_fields = [
+        'created_at',
+        'updated_at',
+    ]
+    
+    fieldsets = [
+        ('基本信息', {
+            'fields': (
+                'date',
+                'industry_code',
+                'industry_name',
+                'parent_industry',
+            )
+        }),
+        ('估值指标', {
+            'fields': (
+                'static_pe',
+                'ttm_pe',
+                'pb_ratio',
+                'dividend_ratio',
+            )
+        }),
+        ('统计数据', {
+            'fields': (
+                'stock_count',
+            )
+        }),
+        ('系统信息', {
+            'fields': (
+                'created_at',
+                'updated_at',
+            ),
+            'classes': ('collapse',)  # 默认折叠
+        }),
+    ]
+    
+    def has_add_permission(self, request):
+        # 禁止手动添加数据
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        # 禁止删除数据
+        return False

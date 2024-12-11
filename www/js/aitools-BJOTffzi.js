@@ -1,0 +1,1 @@
+const t="AI助手",e="聊天",o={title:t,chat:e,"chat-history":"聊天记录","chat-history-clear":"清空聊天记录","chat-history-export":"导出聊天记录","chat-history-import":"导入聊天记录",function:{title:"功能",about:"关于",document:"文档",antdv:"Ant Design Vue 版本","naive-ui":"Naive UI 版本","element-plus":"Element Plus 版本"}};export{e as chat,o as default,t as title};
