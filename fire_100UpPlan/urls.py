@@ -7,7 +7,7 @@ from .views import (
     PurchaseHistoryView, PaymentSuccessView, PaymentCancelView,
     ActivateAccountView, GoogleLogin, get_csrf_token,
     CustomTokenObtainPairView, UserAuthCodesView, UserLogoutView,
-    ForgetPasswordView, ResetPasswordView
+    ForgetPasswordView, ResetPasswordView, WechatLoginView
 )
 from .views_fireplan.market_observation import KimiChatView,MarketValuationView, MarketTrendView, ConvertibleBondMarketDataView, BigDataInvestmentMarketDataView
 
@@ -18,6 +18,7 @@ router = DefaultRouter()
 urlpatterns = [
     path('auth/register/', RegisterView.as_view(), name='register'),
     path('auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/wechat/', WechatLoginView.as_view(), name='wechat_login'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/forget-password/', ForgetPasswordView.as_view(), name='forget_password'),
     path('auth/reset-password/', ResetPasswordView.as_view(), name='reset_password'),

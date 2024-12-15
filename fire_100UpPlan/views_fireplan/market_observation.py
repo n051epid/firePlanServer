@@ -181,16 +181,14 @@ class MarketValuationView(APIView):
                 'securities_balance',
             ).latest('date')
             
-            # 获取最新两条市场温度数据(930903: 中证A股,000985: 中证全指)
-            market_temperatures = IndexData.objects.filter(
-                code='000985'
-            ).values(
+            # 获取最新两条市场温度数据
+            market_temperatures = MarketValuation.objects.values(
                 'date', 
-                'percentile'
+                'market_temperature'
             ).order_by('-date')[:2]
             
-            latest_market_temperature = market_temperatures[0]['percentile'] if market_temperatures else None
-            previous_market_temperature = market_temperatures[1]['percentile'] if len(market_temperatures) > 1 else None
+            latest_market_temperature = market_temperatures[0]['market_temperature'] if market_temperatures else None
+            previous_market_temperature = market_temperatures[1]['market_temperature'] if len(market_temperatures) > 1 else None
             
             # 比较两个温度，判断市场情绪
             trend, sentiment = self._compare_market_temperatures(latest_market_temperature, previous_market_temperature)
@@ -213,8 +211,8 @@ class MarketValuationView(APIView):
         except Exception as e:
             return {}
 
-
-    def _compare_market_temperatures(self, latest_temperature, previous_temperature):
+    @staticmethod
+    def _compare_market_temperatures(latest_temperature, previous_temperature):
         """根据市场温度判断估值水平"""
         # 判断温度上升还是下降
         diff = latest_temperature - previous_temperature
@@ -519,7 +517,30 @@ class ConvertibleBondMarketDataView(APIView):
                 'avg_premium_rt',
                 'avg_ytm_rt'
             ).distinct().order_by('-date')
-            return cb_index_data
+
+            # 获取最新两条数据
+            cb_index_data_trend = BondIndexData.objects.filter(
+                code='CB_INDEX'
+            ).order_by('-date')[:2]
+            
+            # 比较大小，计算趋势 _compare_market_temperatures
+            trend, sentiment = MarketValuationView._compare_market_temperatures(cb_index_data_trend[0].price, cb_index_data_trend[1].price)
+
+
+            # 先将 QuerySet 转换为列表
+            cb_index_data_list = list(cb_index_data)
+
+            # 创建新的字典，包含原有数据和新增数据
+            first_item = cb_index_data_list[0]
+            updated_item = {
+                **first_item,
+                'trend': trend,
+            }
+
+            # 更新列表中的第一项
+            cb_index_data_list[0] = updated_item
+
+            return cb_index_data_list
         except Exception as e:
             return []
         

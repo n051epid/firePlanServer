@@ -49,7 +49,7 @@ ALLOWED_HOSTS_LIST = {
 ALLOWED_HOST = ALLOWED_HOSTS_LIST[os.environ.get('SERVER_MODE')]
 
 
-ALLOWED_HOSTS = [ALLOWED_HOST, 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = [ALLOWED_HOST, 'localhost', '127.0.0.1','47.95.170.152']
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
@@ -154,6 +154,11 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
+
+# SESSION设置：使用缓存加数据库的混合存储
+SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'  
+SESSION_COOKIE_AGE = 900  # 15分钟
+SESSION_SAVE_EVERY_REQUEST = True
 
 # PayPal 配置
 PAYPAL_MODE = os.environ.get('PAYPAL_MODE')
@@ -271,6 +276,15 @@ CSRF_TRUSTED_ORIGINS = [CSRF_TRUSTED_ORIGINS_ALLOWED[os.environ.get('SERVER_MODE
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
+# Redis 缓存设置
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/13',
+    }
+}
+
 # MiniMax API 设置
 MINIMAX_GROUP_ID = os.environ.get('MINIMAX_GROUP_ID')
 MINIMAX_API_KEY = os.environ.get('MINIMAX_API_KEY')
@@ -296,6 +310,14 @@ BCC_EMAIL = os.environ.get('BCC_EMAIL')
 # 集思录 API 设置
 JISILU_API_COOKIE = os.environ.get('JISILU_API_COOKIE')
 
+
+# 微信配置
+WECHAT_APP_ID = os.environ.get('WECHAT_APP_ID')
+WECHAT_APP_SECRET = os.environ.get('WECHAT_APP_SECRET')
+WECHAT_TOKEN = os.environ.get('WECHAT_TOKEN')
+WECHAT_QRCODE_URL = os.environ.get('WECHAT_QRCODE_URL')
+
+
 # Celery 时区设置
 CELERY_TIMEZONE = 'Asia/Shanghai'  # Celery 也使用相同的时区
 
@@ -306,10 +328,6 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 # Celery Beat 定时任务配置
 CELERY_BEAT_SCHEDULE = {
-    'fetch-daily-market-data': {
-        'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
-        'schedule': crontab(hour=20, minute=00),  # 每天20:00执行
-    },
     'fetch-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_index_data',
         'schedule': crontab(hour=20, minute=5),  # 每天20:05执行
@@ -334,7 +352,7 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'fire_100UpPlan.tasks.fetch_bigdata_strategy_data',
         'schedule': crontab(hour=20, minute=30),  # 每天20:30执行
     },
-    'fetch-daily-market-data2': {
+    'fetch-daily-market-data': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
         'schedule': crontab(hour=20, minute=35),  # 每天20:35执行
     }

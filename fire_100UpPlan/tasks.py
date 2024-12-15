@@ -33,19 +33,19 @@ def send_notification_email(subject, message, from_email, recipient_list, bcc_li
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)  # 最多重试3次，每次间隔60秒
-def fetch_daily_market_data(self):
+def fetch_daily_market_data(self, date=None):
     """每日市场数据采集任务"""
     try:
         # 创建 fetcher 实例并直接调用
         fetcher = MarketDataFetcher()
-        market_data = fetcher.fetch_daily_market_data()
-        date = datetime.now().strftime('%Y-%m-%d')
+        market_data = fetcher.fetch_daily_market_data(date)
+        today = datetime.now().strftime('%Y%m%d')
 
         if market_data:
-            print(f"成功获取市场数据 by celery: {date}")
+            print(f"成功获取市场数据 by celery: {today}")
             return {
                 'status': 'success',
-                'date': date,
+                'date': today,
                 'message': market_data['message']
             }
         
@@ -57,7 +57,7 @@ def fetch_daily_market_data(self):
     except Exception as e:
         print(f"Error in daily market data task: {str(e)}")
         return {'status': 'error', 'message': str(e)}
-
+    
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_index_data(self):

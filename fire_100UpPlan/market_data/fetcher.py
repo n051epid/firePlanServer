@@ -41,20 +41,25 @@ class MarketDataFetcher:
             return None
 
     @staticmethod
-    def fetch_daily_market_data():
+    def fetch_daily_market_data(date=None):
         """获取市场整体估值数据"""
         try:
+            if date:
+                today = date
+            else:
+                today = datetime.now().strftime('%Y%m%d')
+            
             # 获取上证指数行情
             sh_index = ak.stock_zh_index_daily(symbol="sh000001")
-            latest_sh_index = sh_index.iloc[-1]
-            latest_date = pd.to_datetime(latest_sh_index.date)
+            sh_index['date'] = pd.to_datetime(sh_index['date'])
+            latest_sh_index = sh_index[sh_index['date']==today]['close'].iloc[0]
             
             # 获取上证指数估值数据
             sh_pe = ak.stock_market_pe_lg(symbol="上证")
             sh_pb = ak.stock_market_pb_lg(symbol="上证")
             
             # 计算12年前的日期
-            current_date = pd.Timestamp.now()
+            current_date = pd.Timestamp(today)
             twelve_years_ago = current_date - pd.DateOffset(years=12)
             
             dates = pd.to_datetime(sh_pe['日期'])
@@ -66,15 +71,16 @@ class MarketDataFetcher:
             pe_series = latest_12_sh_pe_valuation["平均市盈率"]
             pb_series = latest_12_sh_pb_valuation["市净率"]
             
-            current_pe = float(pe_series.iloc[-1])
-            current_pb = float(pb_series.iloc[-1])
+            current_sh_pe = float(pe_series.iloc[-1])
+            current_sh_pb = float(pb_series.iloc[-1])
             
-            pe_rank = len(pe_series[pe_series <= current_pe]) / len(pe_series) * 100
-            pb_rank = len(pb_series[pb_series <= current_pb]) / len(pb_series) * 100
+            sh_pe_rank = len(pe_series[pe_series <= current_sh_pe]) / len(pe_series) * 100
+            sh_pb_rank = len(pb_series[pb_series <= current_sh_pb]) / len(pb_series) * 100
+
+
 
             # 通过下载表格，获取全市场的估值数据
-            today = datetime.now().strftime('%Y%m%d')
-            # today = '20241209'
+            # today = '20241212'
             url = f'https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/dl_resource/industry_pe/bk{today}.zip'
             
             # 沪深市场，不包括北交所（京市），近 12 年历史估值区间（2012-01-01 至 2024-11-16）。数据来源：https://legulegu.com/stockdata/a-pe。
@@ -108,6 +114,18 @@ class MarketDataFetcher:
                 }
             
             if response.status_code == 200:
+
+                # 获取数据中沪深市场近 12 年的数据（PE、PB）以便于计算估值 Rank 百分位
+                twelve_years_ago = datetime.now() - timedelta(days=365 * 12)
+                historical_market_data = MarketValuation.objects.filter(
+                    sector_name='沪深市场',
+                    date__gte=twelve_years_ago
+                ).values('date', 'pe_ratio', 'pb_ratio').order_by('date')
+
+                # 转换为 DataFrame 以便计算百分位
+                if historical_market_data:
+                    df_historical = pd.DataFrame(list(historical_market_data))  # 添加 list() 转换
+
                 # 解压zip文件
                 with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
                     # 获取zip中的xls文件名
@@ -132,7 +150,12 @@ class MarketDataFetcher:
                         100 if pe_ratio >= history_pe_max else
                         (pe_ratio - history_pe_min) / (history_pe_max - history_pe_min) * 100
                     )
-                    
+                    # 计算当前 PE 在历史数据中的 Rank 百分位
+                    current_pe = pe_ratio
+                    pe_rank = len(df_historical[df_historical['pe_ratio'] <= current_pe]) / len(df_historical) * 100
+                    pe_rank = round(pe_rank, 2)
+
+
                     # 读取滚动市盈率sheet
                     df_pe_ttm = pd.read_excel(xls_path, sheet_name='板块滚动市盈率')
                     market_row = df_pe_ttm[df_pe_ttm['板块名称'] == '沪深市场'].iloc[0]
@@ -149,6 +172,10 @@ class MarketDataFetcher:
                         100 if pb_ratio >= history_pb_max else
                         (pb_ratio - history_pb_min) / (history_pb_max - history_pb_min) * 100
                     )
+                    # 计算当前 PB 在历史数据中的 Rank 百分位
+                    current_pb = pb_ratio
+                    pb_rank = len(df_historical[df_historical['pb_ratio'] <= current_pb]) / len(df_historical) * 100
+                    pb_rank = round(pb_rank, 2)
 
                     # 读取股息率sheet
                     df_dividend = pd.read_excel(xls_path, sheet_name='板块股息率')
@@ -157,6 +184,17 @@ class MarketDataFetcher:
                     
                     # 获取沪深市场数据
                     stock_count = int(market_row['股票家数'])
+
+                    # 获取最新市场温度数据之一(930903: 中证A股,000985: 中证全指)
+                    market_temperatures_index = IndexData.objects.filter(
+                        code='000985',
+                        date=today
+                    ).values(
+                        'percentile'
+                    )
+
+                    # 平权计算三个指标（全市场 PE_Rank、全市场 PB_Rank、指数温度）
+                    market_temperature = (pe_rank + pb_rank + market_temperatures_index[0]['percentile'])/3
                     
                     # 清理临时文件
                     os.remove(xls_path)
@@ -169,27 +207,30 @@ class MarketDataFetcher:
             # 创建并保存 MarketValuation 实例
             with transaction.atomic():
                 valuation = MarketValuation(
-                    date=latest_date,
+                    date=today,
                     sector_name='沪深市场',
                     pe_ratio=pe_ratio,
                     pe_range_percentile=round(pe_range_percentile, 2),
+                    pe_rank_percentile=round(pe_rank, 2),
                     pe_ttm_ratio=pe_ttm_ratio,
                     pb_ratio=pb_ratio,
                     pb_range_percentile=round(pb_range_percentile, 2),
+                    pb_rank_percentile=round(pb_rank, 2),
                     dividend_ratio=dividend_ratio,
                     stock_count=stock_count,
                     total_volume=total_volume,
                     total_amount=total_amount,
-                    sh_index=latest_sh_index.close,
-                    sh_pe_rank_percentile=round(pe_rank, 2),
-                    sh_pb_rank_percentile=round(pb_rank, 2),
+                    market_temperature=round(market_temperature, 2),
+                    sh_index=latest_sh_index,
+                    sh_pe_rank_percentile=round(sh_pe_rank, 2),
+                    sh_pb_rank_percentile=round(sh_pb_rank, 2),
                     created_at=datetime.now()
                 )
                 
                 # 检查是否已存在同一天的数据
-                existing = MarketValuation.objects.filter(date=latest_date).first()
+                existing = MarketValuation.objects.filter(date=today).first()
                 if existing:
-                    for field in ['pe_ratio', 'pe_range_percentile', 'pb_ratio', 'pb_range_percentile', 'pe_ttm_ratio', 'dividend_ratio', 'stock_count', 'total_volume', 'total_amount', 
+                    for field in ['pe_ratio', 'market_temperature', 'pe_range_percentile', 'pe_rank_percentile', 'pb_ratio', 'pb_range_percentile', 'pb_rank_percentile', 'pe_ttm_ratio', 'dividend_ratio', 'stock_count', 'total_volume', 'total_amount', 
                                 'sh_index', 'sh_pe_rank_percentile', 'sh_pb_rank_percentile']:
                         setattr(existing, field, getattr(valuation, field))
                     existing.save()
@@ -210,8 +251,7 @@ class MarketDataFetcher:
                 'message': f"Error fetching market valuation: {str(e)}"
             }
 
-
-
+    
     @staticmethod
     def fetch_margin_trading_data():
         """获取两融数据"""

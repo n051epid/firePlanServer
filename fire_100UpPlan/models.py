@@ -92,6 +92,20 @@ class MembershipPurchase(models.Model):
         return f"{self.user.username} - {self.membership_type.name} - {self.purchase_date.strftime('%Y-%m-%d %H:%M:%S')}"
 
 
+# 市场数据基础模型
+class BaseMarketData(models.Model):
+    """市场数据基础模型"""
+    date = models.DateField('交易日期')
+    code = models.CharField('代码', max_length=50)
+    name = models.CharField('名称', max_length=100)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        abstract = True
+        indexes = [
+            models.Index(fields=['date', 'code']),
+        ]
+
 
 class MarketValuation(models.Model):
     """市场整体估值数据"""
@@ -101,10 +115,12 @@ class MarketValuation(models.Model):
     # 静态市盈率和滚动市盈率
     pe_ratio = models.FloatField('静态市盈率', null=True)
     pe_range_percentile = models.FloatField('PE区间百分位', null=True)
+    pe_rank_percentile = models.FloatField('PE Rank百分位', null=True)
     pe_ttm_ratio = models.FloatField('滚动市盈率', null=True)
     # 市净率
     pb_ratio = models.FloatField('市净率', null=True)
     pb_range_percentile = models.FloatField('PB区间百分位', null=True)
+    pb_rank_percentile = models.FloatField('PB Rank百分位', null=True)
     # 股息率
     dividend_ratio = models.FloatField('股息率', null=True)
     # 股票家数
@@ -113,10 +129,12 @@ class MarketValuation(models.Model):
     total_volume = models.FloatField('全市场交易量', null=True)
     # 全市场成交额
     total_amount = models.FloatField('全市场成交额', null=True)
+    # 全市场温度
+    market_temperature = models.FloatField('全市场温度', null=True)
     # 上证指数
     sh_index = models.FloatField('上证指数', null=True)
-    sh_pe_rank_percentile = models.FloatField('上证PE百分位', null=True)
-    sh_pb_rank_percentile = models.FloatField('上证PB百分位', null=True)
+    sh_pe_rank_percentile = models.FloatField('上证PE Rank百分位', null=True)
+    sh_pb_rank_percentile = models.FloatField('上证PB Rank百分位', null=True)
 
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
@@ -205,19 +223,6 @@ class IndustryValuation(models.Model):
     def __str__(self):
         return f"{self.industry_name} ({self.industry_code}) - {self.date}"
 
-# 市场数据基础模型
-class BaseMarketData(models.Model):
-    """市场数据基础模型"""
-    date = models.DateField('交易日期')
-    code = models.CharField('代码', max_length=50)
-    name = models.CharField('名称', max_length=100)
-    created_at = models.DateTimeField('创建时间', auto_now_add=True)
-
-    class Meta:
-        abstract = True
-        indexes = [
-            models.Index(fields=['date', 'code']),
-        ]
 
 class StockData(BaseMarketData):
     """股票数据"""

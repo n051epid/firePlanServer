@@ -200,6 +200,28 @@ class MarketDataAdmin(admin.ModelAdmin):
         app_dict['app_label'] = 'market_data'  # 设置应用标签
         return [app_dict]
 
+@admin.register(MarketValuation)
+class MarketValuationAdmin(MarketDataAdmin):
+    list_display = ('date', 'sector_name', 'market_temperature', 'pe_ratio', 'pe_range_percentile', 'pe_rank_percentile', 'pe_ttm_ratio', 'pb_ratio', 'pb_range_percentile', 'pb_rank_percentile', 'dividend_ratio', 'stock_count', 'total_volume', 'total_amount', 'sh_index', 'sh_pe_rank_percentile', 'sh_pb_rank_percentile')
+    date_hierarchy = 'date'
+    ordering = ('-date',)
+    app_label = 'market_data'
+
+@admin.register(IndexData)
+class IndexDataAdmin(MarketDataAdmin):
+    list_display = ('date', 'code', 'name', 'close', 'pe_ratio', 'pe_ttm_ratio', 'pb_ratio', 'percentile')
+    list_filter = ('date','name')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+
+@admin.register(MarginTradingData)
+class MarginTradingDataAdmin(MarketDataAdmin):
+    list_display = ('date', 'margin_balance', 'securities_balance', 'margin_buy', 'securities_sell', 'securities_firms', 'branches', 'individual_investors', 'institutional_investors', 'active_traders', 'margin_traders', 'collateral_value', 'maintenance_ratio')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
 @admin.register(StockData)
 class StockDataAdmin(MarketDataAdmin):
     list_display = (
@@ -234,13 +256,6 @@ class BigDataStrategyStockDataAdmin(MarketDataAdmin):
     ordering = ('-bigdata_score',)
     app_label = 'market_data'
 
-@admin.register(IndexData)
-class IndexDataAdmin(MarketDataAdmin):
-    list_display = ('date', 'code', 'name', 'close', 'pe_ratio', 'pe_ttm_ratio', 'pb_ratio', 'percentile')
-    list_filter = ('date','name')
-    search_fields = ('code', 'name')
-    date_hierarchy = 'date'
-    app_label = 'market_data'
 
 @admin.register(FundData)
 class FundDataAdmin(MarketDataAdmin):
@@ -250,14 +265,6 @@ class FundDataAdmin(MarketDataAdmin):
     date_hierarchy = 'date'
     app_label = 'market_data'
 
-@admin.register(BondData)
-class BondDataAdmin(MarketDataAdmin):
-    list_display = ('code', 'name', 'close', 'redemption_countdown', 'is_callable', 'redemption_trigger_price', 'redemption_price', 'convertible_start_date', 'last_trading_date', 'stock_code', 'stock_name', 'stock_price', 'stock_pb', 'stock_industry_pb_ratio_median', 'stock_pe_ttm_ratio', 'stock_industry_pe_ttm_ratio_median', 'convertible_price', 'convertible_value', 'premium_rate', 'bond_rating', 'remaining_size', 'ytm_before_tax', 'maturity_date', 'double_low', 'listing_date')
-    list_filter = ('is_callable', 'bond_rating')
-    search_fields = ('code', 'name')
-    date_hierarchy = 'date'
-    ordering = ('premium_rate','remaining_size','double_low')
-    app_label = 'market_data'
 
 @admin.register(BondIndexData)
 class BondIndexDataAdmin(MarketDataAdmin):
@@ -266,17 +273,15 @@ class BondIndexDataAdmin(MarketDataAdmin):
     date_hierarchy = 'date'
     app_label = 'market_data'
 
-@admin.register(MarketValuation)
-class MarketValuationAdmin(MarketDataAdmin):
-    list_display = ('date', 'sector_name', 'pe_ratio', 'pe_range_percentile', 'pe_ttm_ratio', 'pb_ratio', 'pb_range_percentile', 'dividend_ratio', 'stock_count', 'total_volume', 'total_amount', 'sh_index', 'sh_pe_rank_percentile', 'sh_pb_rank_percentile')
+@admin.register(BondData)
+class BondDataAdmin(MarketDataAdmin):
+    list_display = ('code', 'name', 'close', 'double_low', 'redemption_countdown', 'is_callable', 'redemption_trigger_price', 'redemption_price', 'convertible_start_date', 'last_trading_date', 'stock_code', 'stock_name', 'stock_price', 'stock_pb', 'stock_industry_pb_ratio_median', 'stock_pe_ttm_ratio', 'stock_industry_pe_ttm_ratio_median', 'convertible_price', 'convertible_value', 'premium_rate', 'bond_rating', 'remaining_size', 'ytm_before_tax', 'maturity_date', 'listing_date')
+    list_filter = ('is_callable', 'bond_rating')
+    search_fields = ('code', 'name')
     date_hierarchy = 'date'
+    ordering = ('premium_rate','remaining_size','double_low')
     app_label = 'market_data'
 
-@admin.register(MarginTradingData)
-class MarginTradingDataAdmin(MarketDataAdmin):
-    list_display = ('date', 'margin_balance', 'securities_balance', 'margin_buy', 'securities_sell', 'securities_firms', 'branches', 'individual_investors', 'institutional_investors', 'active_traders', 'margin_traders', 'collateral_value', 'maintenance_ratio')
-    date_hierarchy = 'date'
-    app_label = 'market_data'
 
 @admin.register(IndustryValuation)
 class IndustryValuationAdmin(admin.ModelAdmin):
