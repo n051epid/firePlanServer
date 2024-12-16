@@ -35,7 +35,7 @@ backups/
 Thumbs.db
 
 # 日志文件
-logs/
+logs/*.log
 
 # 静态文件收集目录
 /static/
@@ -47,6 +47,7 @@ logs/
 *.tmp
 *.bak
 *.swp
+*.bak.py
 dist.zip
 
 # Celery

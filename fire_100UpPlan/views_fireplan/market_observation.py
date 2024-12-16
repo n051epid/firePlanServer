@@ -447,6 +447,7 @@ class BigDataInvestmentMarketDataView(APIView):
                 'pb_ratio',
                 'dividend_ratio',
                 'one_year_increase',
+                'total_market_value',
                 'industry_name',
                 'industry_code',
                 'parent_industry_code',

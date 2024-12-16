@@ -124,7 +124,7 @@ MIDDLEWARE = [
 # ADD JWT 设置
 from datetime import timedelta
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': False,
@@ -281,7 +281,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': 'redis://127.0.0.1:6379/13',
+        'LOCATION': 'redis://127.0.0.1:6379/4',
     }
 }
 
@@ -330,31 +330,31 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_BEAT_SCHEDULE = {
     'fetch-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_index_data',
-        'schedule': crontab(hour=20, minute=5),  # 每天20:05执行
+        'schedule': crontab(hour=19, minute=5),  # 每天19:05执行
     },
     'fetch-margin-trading-data': {
         'task': 'fire_100UpPlan.tasks.fetch_margin_trading_data',
-        'schedule': crontab(hour=20, minute=10),  # 每天20:10执行
+        'schedule': crontab(hour=19, minute=10),  # 每天19:10执行
     },
     'fetch-industry-valuation-data': {
         'task': 'fire_100UpPlan.tasks.fetch_industry_valuation_data',
-        'schedule': crontab(hour=20, minute=15),  # 每天20:15执行
+        'schedule': crontab(hour=19, minute=15),  # 每天19:15执行
     },
     'fetch_convertible_bond_data': {
         'task': 'fire_100UpPlan.tasks.fetch_convertible_bond_data',
-        'schedule': crontab(hour=20, minute=20),  # 每天20:20执行
+        'schedule': crontab(hour=19, minute=20),  # 每天19:20执行
     },
     'fetch-bond-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bond_index_data',
-        'schedule': crontab(hour=20, minute=25),  # 每天20:25执行
+        'schedule': crontab(hour=19, minute=25),  # 每天19:25执行
     },
     'fetch-bigdata-strategy-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bigdata_strategy_data',
-        'schedule': crontab(hour=20, minute=30),  # 每天20:30执行
+        'schedule': crontab(hour=19, minute=30),  # 每天19:30执行
     },
     'fetch-daily-market-data': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
-        'schedule': crontab(hour=20, minute=35),  # 每天20:35执行
+        'schedule': crontab(hour=19, minute=35),  # 每天19:35执行
     }
 }
 
