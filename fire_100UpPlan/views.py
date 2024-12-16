@@ -41,6 +41,7 @@ from allauth.socialaccount.models import SocialAccount
 from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
 from .serializers import UserRegistrationSerializer
+import hashlib
 import random
 import string
 import time
@@ -670,6 +671,7 @@ class PaymentCancelView(APIView):
         return render(request, 'payment_cancel.html')
 
 class WeChatAPIView(APIView):
+    # 修改微信回调 URL 验证
     def get(self, request):
         # 获取参数
         signature = request.GET.get('signature', '')
@@ -698,13 +700,13 @@ class WeChatAPIView(APIView):
             return HttpResponse(echostr)
         else:
             return HttpResponse("验证失败")
-    def get(self, request):
-        access_token = wechat_token.get_access_token()
-        if not access_token:
-            return JsonResponse({
-                'success': False,
-                'error': '获取access_token失败'
-            })
+    # def get(self, request):
+    #     access_token = wechat_token.get_access_token()
+    #     if not access_token:
+    #         return JsonResponse({
+    #             'success': False,
+    #             'error': '获取access_token失败'
+    #         })
             
         # 使用 access_token 调用其他接口
         # ...
