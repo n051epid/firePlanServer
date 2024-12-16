@@ -40,10 +40,16 @@ DEBUG_MODE = {
 SERVER_MODE = os.environ.get('SERVER_MODE', 'release')
 DEBUG = DEBUG_MODE.get(SERVER_MODE, False)
 
+FRONTEND_URL_RELEASE = os.environ.get('FRONTEND_URL_RELEASE', 'https://planb.qinglv.online')
+FRONTEND_URL_TESTING = os.environ.get('FRONTEND_URL_TESTING', 'http://localhost:5666')
+
+BACKEND_URL_RELEASE = os.environ.get('BACKEND_URL_RELEASE', 'api.planb.qinglv.online')
+BACKEND_URL_TESTING = os.environ.get('BACKEND_URL_TESTING', 'localhost:8000')
+
 
 ALLOWED_HOSTS_LIST = {
-    'release': 'api.guizhenintel.com',
-    'testing': 'api-testing.guizhenintel.com'
+    'release': BACKEND_URL_RELEASE,
+    'testing': BACKEND_URL_TESTING
 }
 
 ALLOWED_HOST = ALLOWED_HOSTS_LIST[os.environ.get('SERVER_MODE')]
@@ -228,11 +234,8 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # 允许所有来源访问
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
-    "https://api.guizhenintel.com",
-    "http://fireqinglv.guizhenintel.com",
-    "https://fireqinglv.guizhenintel.com",
-    "http://localhost:5666",
-    "http://127.0.0.1:5666",
+    FRONTEND_URL_RELEASE,
+    FRONTEND_URL_TESTING,
 ]
 
 # 允许携带凭证（如果需要）
@@ -264,8 +267,8 @@ CORS_ALLOW_HEADERS = [
 ]
 
 CSRF_TRUSTED_ORIGINS_ALLOWED = {
-    'release': 'https://api.guizhenintel.com',
-    'testing': 'https://api-testing.guizhenintel.com'
+    'release': BACKEND_URL_RELEASE,
+    'testing': BACKEND_URL_TESTING
 }
 
 CSRF_TRUSTED_ORIGINS = [CSRF_TRUSTED_ORIGINS_ALLOWED[os.environ.get('SERVER_MODE')],'chrome-extension://gidgjoelmejkmlngjdmoeemeckhifchl']
@@ -276,14 +279,6 @@ CSRF_TRUSTED_ORIGINS = [CSRF_TRUSTED_ORIGINS_ALLOWED[os.environ.get('SERVER_MODE
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
-# Redis 缓存设置
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': 'redis://127.0.0.1:6379/4',
-    }
-}
 
 # MiniMax API 设置
 MINIMAX_GROUP_ID = os.environ.get('MINIMAX_GROUP_ID')
@@ -318,6 +313,14 @@ WECHAT_TOKEN = os.environ.get('WECHAT_TOKEN')
 WECHAT_QRCODE_URL = os.environ.get('WECHAT_QRCODE_URL')
 
 
+# Redis 缓存设置
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.environ.get('REDIS_CACHE_LOCATION')
+    }
+}
+
 # Celery 时区设置
 CELERY_TIMEZONE = 'Asia/Shanghai'  # Celery 也使用相同的时区
 
@@ -327,34 +330,35 @@ CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 # Celery Beat 定时任务配置
+CELERY_BEAT_HOURS = os.environ.get('CELERY_BEAT_HOURS')
 CELERY_BEAT_SCHEDULE = {
     'fetch-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_index_data',
-        'schedule': crontab(hour=19, minute=5),  # 每天19:05执行
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=5),  # 每天19:05执行
     },
     'fetch-margin-trading-data': {
         'task': 'fire_100UpPlan.tasks.fetch_margin_trading_data',
-        'schedule': crontab(hour=19, minute=10),  # 每天19:10执行
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=10),  # 每天19:10执行
     },
     'fetch-industry-valuation-data': {
         'task': 'fire_100UpPlan.tasks.fetch_industry_valuation_data',
-        'schedule': crontab(hour=19, minute=15),  # 每天19:15执行
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=15),  # 每天19:15执行
     },
     'fetch_convertible_bond_data': {
         'task': 'fire_100UpPlan.tasks.fetch_convertible_bond_data',
-        'schedule': crontab(hour=19, minute=20),  # 每天19:20执行
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=20),  # 每天19:20执行
     },
     'fetch-bond-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bond_index_data',
-        'schedule': crontab(hour=19, minute=25),  # 每天19:25执行
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=25),  # 每天19:25执行
     },
     'fetch-bigdata-strategy-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bigdata_strategy_data',
-        'schedule': crontab(hour=19, minute=30),  # 每天19:30执行
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=30),  # 每天19:30执行
     },
     'fetch-daily-market-data': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
-        'schedule': crontab(hour=19, minute=35),  # 每天19:35执行
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=35),  # 每天19:35执行
     }
 }
 
