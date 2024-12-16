@@ -23,6 +23,7 @@ vue-vben-admin
 node_modules/
 tests/
 backups/
+*_env/
 
 # IDE 相关
 .idea/
@@ -51,7 +52,7 @@ logs/*.log
 dist.zip
 
 # Celery
-celerybeat-schedule
+celerybeat-schedule.*
 celerybeat.pid
 
 # 测试覆盖率报告
