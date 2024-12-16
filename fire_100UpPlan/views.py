@@ -669,42 +669,42 @@ class PaymentCancelView(APIView):
         # 更新订单状态为取消，待更新一个支付取消页面
         return render(request, 'payment_cancel.html')
 
-# class WeChatAPIView(APIView):
-    # def get(self, request):
-    #     # 获取参数
-    #     signature = request.GET.get('signature', '')
-    #     timestamp = request.GET.get('timestamp', '')
-    #     nonce = request.GET.get('nonce', '')
-    #     echostr = request.GET.get('echostr', '')
+class WeChatAPIView(APIView):
+    def get(self, request):
+        # 获取参数
+        signature = request.GET.get('signature', '')
+        timestamp = request.GET.get('timestamp', '')
+        nonce = request.GET.get('nonce', '')
+        echostr = request.GET.get('echostr', '')
         
-    #     # 微信公众号的 token
-    #     token = settings.WECHAT_TOKEN
+        # 微信公众号的 token
+        token = settings.WECHAT_TOKEN
         
-    #     # 1. 将 token、timestamp、nonce 三个参数进行字典序排序
-    #     temp_list = [token, timestamp, nonce]
-    #     temp_list.sort()
+        # 1. 将 token、timestamp、nonce 三个参数进行字典序排序
+        temp_list = [token, timestamp, nonce]
+        temp_list.sort()
         
-    #     # 2. 将三个参数字符串拼接成一个字符串
-    #     temp_str = ''.join(temp_list)
+        # 2. 将三个参数字符串拼接成一个字符串
+        temp_str = ''.join(temp_list)
         
-    #     # 3. 进行 sha1 加密
-    #     sha1 = hashlib.sha1()
-    #     sha1.update(temp_str.encode('utf-8'))
-    #     hashcode = sha1.hexdigest()
+        # 3. 进行 sha1 加密
+        sha1 = hashlib.sha1()
+        sha1.update(temp_str.encode('utf-8'))
+        hashcode = sha1.hexdigest()
         
-    #     # 4. 对比 signature
-    #     if hashcode == signature:
-    #         # 5. 验证通过，返回 echostr
-    #         return HttpResponse(echostr)
-    #     else:
-    #         return HttpResponse("验证失败")
-#     def get(self, request):
-#         access_token = wechat_token.get_access_token()
-#         if not access_token:
-#             return JsonResponse({
-#                 'success': False,
-#                 'error': '获取access_token失败'
-#             })
+        # 4. 对比 signature
+        if hashcode == signature:
+            # 5. 验证通过，返回 echostr
+            return HttpResponse(echostr)
+        else:
+            return HttpResponse("验证失败")
+    def get(self, request):
+        access_token = wechat_token.get_access_token()
+        if not access_token:
+            return JsonResponse({
+                'success': False,
+                'error': '获取access_token失败'
+            })
             
         # 使用 access_token 调用其他接口
         # ...
