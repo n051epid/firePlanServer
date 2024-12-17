@@ -18,6 +18,6 @@ from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('61c24820324231ece258c9da06e29867/', admin.site.urls),
     path('v1/', include('fire_100UpPlan.urls')),  # 包含应用级 URLs
 ]

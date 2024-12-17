@@ -363,6 +363,10 @@ CELERY_BEAT_SCHEDULE = {
     'fetch-daily-market-data': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=35),  # 每天19:35执行
+    },
+    'refresh-database-cache': {
+        'task': 'fire_100UpPlan.tasks.refresh_database_cache',
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=40),  # 每天19:40执行
     }
 }
 

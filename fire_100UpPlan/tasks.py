@@ -1,7 +1,7 @@
 import logging
 from celery import shared_task
 from django.core.mail import EmailMessage
-from .market_data.fetcher import MarketDataFetcher, ConvertibleBondMarketDataFetcher
+from .market_data.fetcher import MarketDataFetcher, ConvertibleBondMarketDataFetcher, RefreshDatabaseCache
 from celery.exceptions import MaxRetriesExceededError
 from datetime import datetime, timedelta
 
@@ -255,6 +255,25 @@ def fetch_bond_index_data(self):
 
     except Exception as e:
         print(f"Error in bond_index_data_task: {str(e)}")
+        try:
+            self.retry()
+        except MaxRetriesExceededError:
+            return {'status': 'error', 'message': 'Max retries exceeded'}
+        
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def refresh_database_cache(self):
+    """刷新数据库缓存"""
+    try:
+        fetcher = RefreshDatabaseCache()
+        result = fetcher.refresh_database_cache()
+
+        if result:
+            print(f"数据库缓存刷新成功")
+            return {'status': 'success'}
+        
+    except Exception as e:
+        print(f"Error in refresh_database_cache_task: {str(e)}")
         try:
             self.retry()
         except MaxRetriesExceededError:

@@ -196,7 +196,7 @@ class MarketDataFetcher:
                     # 平权计算三个指标（全市场 PE_Rank、全市场 PB_Rank、指数温度）
                     market_temperature = (pe_rank + pb_rank + market_temperatures_index[0]['percentile'])/3
                     
-                    # 清理临时文件
+                    # 清���临时文件
                     os.remove(xls_path)
             
             # 获取东方财富网-沪深京 A 股-实时行情数据
@@ -1457,6 +1457,12 @@ class ConvertibleBondMarketDataFetcher:
             
             return data
 
-
-
-        
+class RefreshDatabaseCache:
+    """刷新数据库缓存"""
+    @staticmethod
+    def refresh_database_cache():
+        """刷新数据库缓存"""
+        from django.core.cache import cache
+        cache.clear()
+        # 如果需要，可以在这里添加其他刷新逻辑
+        return True
