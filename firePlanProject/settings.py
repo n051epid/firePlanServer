@@ -43,7 +43,7 @@ DEBUG = DEBUG_MODE.get(SERVER_MODE, False)
 FRONTEND_URL_RELEASE = os.environ.get('FRONTEND_URL_RELEASE', 'https://planb.qinglv.online')
 FRONTEND_URL_TESTING = os.environ.get('FRONTEND_URL_TESTING', 'http://localhost:5666')
 
-BACKEND_URL_RELEASE = os.environ.get('BACKEND_URL_RELEASE', 'api.planb.qinglv.online')
+BACKEND_URL_RELEASE = os.environ.get('BACKEND_URL_RELEASE', 'api-planb.qinglv.online')
 BACKEND_URL_TESTING = os.environ.get('BACKEND_URL_TESTING', 'localhost:8000')
 
 
@@ -88,6 +88,10 @@ REST_FRAMEWORK = {
 #    'DEFAULT_PERMISSION_CLASSES': [
 #        'rest_framework.permissions.IsAuthenticated',
 #    ],
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',  # 只保留 JSON 渲染器
+        # 移除 'rest_framework.renderers.BrowsableAPIRenderer'
+    ],
 }
 
 # Application definition

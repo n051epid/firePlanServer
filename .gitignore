@@ -53,6 +53,7 @@ dist.zip
 
 # Celery
 celerybeat-schedule.*
+celerybeat-schedule.dat
 celerybeat.pid
 
 # 测试覆盖率报告

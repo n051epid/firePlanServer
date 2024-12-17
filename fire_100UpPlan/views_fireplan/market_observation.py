@@ -221,7 +221,7 @@ class MarketValuationView(APIView):
         elif diff < 0:
             trend = "↓"
         else:
-            trend = "-"
+            trend = "→"
         
         if latest_temperature <= 30:
             sentiment = "Low"  # 低估
