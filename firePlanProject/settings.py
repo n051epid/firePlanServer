@@ -90,7 +90,7 @@ REST_FRAMEWORK = {
 #    ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',  # 只保留 JSON 渲染器
-        # 移除 'rest_framework.renderers.BrowsableAPIRenderer'
+        'rest_framework.renderers.BrowsableAPIRenderer',
     ],
 }
 
@@ -271,11 +271,14 @@ CORS_ALLOW_HEADERS = [
 ]
 
 CSRF_TRUSTED_ORIGINS_ALLOWED = {
-    'release': BACKEND_URL_RELEASE,
-    'testing': BACKEND_URL_TESTING
+    'release': f'https://{BACKEND_URL_RELEASE}',
+    'testing': f'https://{BACKEND_URL_TESTING}'
 }
 
-CSRF_TRUSTED_ORIGINS = [CSRF_TRUSTED_ORIGINS_ALLOWED[os.environ.get('SERVER_MODE')],'chrome-extension://gidgjoelmejkmlngjdmoeemeckhifchl']
+CSRF_TRUSTED_ORIGINS = [
+    CSRF_TRUSTED_ORIGINS_ALLOWED[os.environ.get('SERVER_MODE')],
+    'chrome-extension://gidgjoelmejkmlngjdmoeemeckhifchl'
+]
 
 
 # Default primary key field type

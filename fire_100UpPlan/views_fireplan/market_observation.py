@@ -215,7 +215,7 @@ class MarketValuationView(APIView):
     def _compare_market_temperatures(latest_temperature, previous_temperature):
         """根据市场温度判断估值水平"""
         # 判断温度上升还是下降
-        diff = latest_temperature - previous_temperature
+        diff = round(latest_temperature, 0) - round(previous_temperature, 0)
         if diff > 0:
             trend = "↑"
         elif diff < 0:
@@ -582,7 +582,7 @@ class ConvertibleBondMarketDataView(APIView):
                 # models.Q(stock_pe_ttm_ratio__isnull=True) |  # 正股 TTM PE 为空
                 # models.Q(stock_industry_pb_ratio_median__lt=models.F('stock_pb')) |  # 正股 PB 小于行业中位数PB
                 # models.Q(stock_industry_pe_ttm_ratio_median__lt=models.F('stock_pe_ttm_ratio')) |  # 正股 TTM PE 小于行业中位数TTM PE
-                models.Q(next_redeem_date__lte=datetime.now().date() + timedelta(days=365)) | # 下一次强赎日期小于一年（PS：这个条件感觉不太合理。很多正在强赎倒计时的转债都在策略列表里）
+                # models.Q(next_redeem_date__lte=datetime.now().date() + timedelta(days=365)) | # 下一次强赎日期小于一年（PS：这个条件感觉不太合理。很多正在强赎倒计时的转债都在策略列表里）
                 models.Q(maturity_date__lte=datetime.now().date() + timedelta(days=365))  # 到期时间小于一年的
             ).values(
                 'code',

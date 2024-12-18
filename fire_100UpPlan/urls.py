@@ -10,6 +10,7 @@ from .views import (
     ForgetPasswordView, ResetPasswordView, WechatLoginView, WeChatAPIView
 )
 from .views_fireplan.market_observation import KimiChatView,MarketValuationView, MarketTrendView, ConvertibleBondMarketDataView, BigDataInvestmentMarketDataView
+from .views_fireplan.weixin_offiaccount_views import WeChatMenuAPIView
 
 router = DefaultRouter()
 # 如果有任何 ViewSet，在这里注册，例如：
@@ -43,5 +44,6 @@ urlpatterns = [
     path('market/trend/', MarketTrendView.as_view(), name='market_trend'),
     path('convertible-bond/cb-market-data/', ConvertibleBondMarketDataView.as_view(), name='convertible_bond_market_data'),
     path('big-data-investment/bd-market-data/', BigDataInvestmentMarketDataView.as_view(), name='big_data_investment_market_data'),
+    path('wechat/menu/create/', WeChatMenuAPIView.as_view(), name='wechat_menu_create'),
     path('', include(router.urls)),
 ]

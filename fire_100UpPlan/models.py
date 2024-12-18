@@ -391,3 +391,24 @@ class FundData(BaseMarketData):
         verbose_name = '基金数据'
         verbose_name_plural = verbose_name
 
+class WeChatMenu(models.Model):
+    name = models.CharField('菜单名称', max_length=64)
+    type = models.CharField('类型', max_length=20, choices=[
+        ('click', '点击'),
+        ('view', '视图'),
+    ])
+    key = models.CharField('菜单KEY', max_length=128, blank=True)
+    url = models.URLField('跳转链接', blank=True)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='sub_buttons')
+    order = models.IntegerField('排序', default=0)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '微信菜单'
+        verbose_name_plural = '微信菜单'
+        ordering = ['order']
+
+    def __str__(self):
+        return self.name
+

@@ -12,7 +12,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 import requests
 from django.conf import settings
-from .utils import verify_paypal_webhook, wechat_token
+from .utils import verify_paypal_webhook
 import paypalrestsdk
 from .models import MembershipType, Membership, MembershipPurchase
 from rest_framework import generics
@@ -671,7 +671,7 @@ class PaymentCancelView(APIView):
         return render(request, 'payment_cancel.html')
 
 class WeChatAPIView(APIView):
-    # 修改微信回调 URL 验证
+    # 仅在修改微信回调 URL 时，验证使用
     def get(self, request):
         # 获取参数
         signature = request.GET.get('signature', '')
@@ -700,16 +700,7 @@ class WeChatAPIView(APIView):
             return HttpResponse(echostr)
         else:
             return HttpResponse("验证失败")
-    # def get(self, request):
-    #     access_token = wechat_token.get_access_token()
-    #     if not access_token:
-    #         return JsonResponse({
-    #             'success': False,
-    #             'error': '获取access_token失败'
-    #         })
-            
-        # 使用 access_token 调用其他接口
-        # ...
+
 
 class WechatLoginView(APIView):
     def get(self, request):
