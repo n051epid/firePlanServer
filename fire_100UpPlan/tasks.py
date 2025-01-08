@@ -41,21 +41,24 @@ def fetch_daily_market_data(self, date=None):
         market_data = fetcher.fetch_daily_market_data(date)
         today = datetime.now().strftime('%Y%m%d')
 
-        if market_data:
+        if market_data and market_data.get('status') == 'success':  # 检查 market_data 是否成功
             print(f"成功获取市场数据 by celery: {today}")
             return {
                 'status': 'success',
                 'date': today,
-                'message': market_data['message']
+                'message': market_data.get('message', '获取成功')
             }
-        
+        else:
+            error_msg = market_data.get('message', 'Failed to fetch market data') if market_data else 'No market data returned'
+            print(f"获取市场数据失败: {error_msg}")
+            raise Exception(error_msg)
+            
+    except Exception as e:
+        print(f"Error in daily market data task: {str(e)}")
         try:
             self.retry()
         except MaxRetriesExceededError:
             return {'status': 'error', 'message': 'Max retries exceeded'}
-            
-    except Exception as e:
-        print(f"Error in daily market data task: {str(e)}")
         return {'status': 'error', 'message': str(e)}
     
 

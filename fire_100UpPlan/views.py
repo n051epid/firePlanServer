@@ -19,6 +19,7 @@ from rest_framework import generics
 from .serializers import MembershipTypeSerializer, CustomTokenObtainPairSerializer
 from django.http import HttpResponse
 import json
+from django.http import JsonResponse
 import logging
 from django.db import transaction
 from django.views.decorators.csrf import csrf_exempt
@@ -34,7 +35,6 @@ from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from django.middleware.csrf import get_token
-from django.http import JsonResponse
 import traceback
 from django.views.decorators.csrf import ensure_csrf_cookie
 from allauth.socialaccount.models import SocialAccount
@@ -669,187 +669,6 @@ class PaymentCancelView(APIView):
     def get(self, request):
         # 更新订单状态为取消，待更新一个支付取消页面
         return render(request, 'payment_cancel.html')
-
-class WeChatAPIView(APIView):
-    # 仅在修改微信回调 URL 时，验证使用
-    def get(self, request):
-        # 获取参数
-        signature = request.GET.get('signature', '')
-        timestamp = request.GET.get('timestamp', '')
-        nonce = request.GET.get('nonce', '')
-        echostr = request.GET.get('echostr', '')
-        
-        # 微信公众号的 token
-        token = settings.WECHAT_TOKEN
-        
-        # 1. 将 token、timestamp、nonce 三个参数进行字典序排序
-        temp_list = [token, timestamp, nonce]
-        temp_list.sort()
-        
-        # 2. 将三个参数字符串拼接成一个字符串
-        temp_str = ''.join(temp_list)
-        
-        # 3. 进行 sha1 加密
-        sha1 = hashlib.sha1()
-        sha1.update(temp_str.encode('utf-8'))
-        hashcode = sha1.hexdigest()
-        
-        # 4. 对比 signature
-        if hashcode == signature:
-            # 5. 验证通过，返回 echostr
-            return HttpResponse(echostr)
-        else:
-            return HttpResponse("验证失败")
-
-
-class WechatLoginView(APIView):
-    def get(self, request):
-        verification_code = request.GET.get('verification_code')
-        
-        if not verification_code:
-            verification_code = ''.join(random.choices(string.ascii_letters + string.digits, k=3))
-            # 使用 cache 替代 session
-            cache_key = f'wechat_login_{verification_code}'
-            cache.set(
-                cache_key,
-                {
-                    'timestamp': time.time(),
-                    'verification_code': verification_code,
-                    'openid': None
-                },
-                timeout=300  # 5分钟过期
-            )
-
-            return Response({
-                'code': 0,
-                'data': {
-                    'qr_code_url': settings.WECHAT_QRCODE_URL,
-                    'verification_code': verification_code
-                },
-                'error': None,
-                'message': 'Success'
-            })
-        
-        # 从 cache 中查找
-        cache_key = f'wechat_login_{verification_code}'
-        session_data = cache.get(cache_key)
-        logger.info('session_data: ',session_data)
-
-        if not session_data:
-            #不做任何处理
-            return Response({
-                'code': 0,
-                'data': {'status': 'waiting'},
-                'error': None,
-                'message': 'Waiting for scan'
-            })
-        
-        # 检查session是否过期（例如 5分钟）
-        if time.time() - session_data['timestamp'] > 300:
-            cache_key = f'wechat_login_{verification_code}'
-            cache.delete(cache_key)
-            return Response({
-                'code': 1,
-                'data': None,
-                'error': 'Session expired',
-                'message': 'Failed'
-            }, status=status.HTTP_400_BAD_REQUEST)
-            
-        openid = session_data.get('openid')
-        if not openid:
-            return Response({
-                'code': 0,
-                'data': {'status': 'waiting'},
-                'error': None,
-                'message': 'Waiting for scan'
-            })
-            
-        try:
-            # 查找用户
-            user = User.objects.get(username=f'wechat_{openid}')
-            
-            # 生成JWT令牌
-            refresh = RefreshToken.for_user(user)
-            
-            # 删除缓存
-            cache_key = f'wechat_login_{verification_code}'
-            cache.delete(cache_key)
-            
-            return Response({
-                'code': 0,
-                'data': {
-                    'status': 'success',
-                    'accessToken': str(refresh.access_token),
-                    'refreshToken': str(refresh)
-                },
-                'error': None,
-                'message': 'Login Successful'
-            })
-            
-        except User.DoesNotExist:
-            return Response({
-                'code': 1,
-                'data': None,
-                'error': 'User not found',
-                'message': 'User not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-
-    def post(self, request):
-        try:
-            # 从请求体获取XML数据
-            xml_data = request.body
-            xml_dict = xmltodict.parse(xml_data)['xml']
-
-            # 获取OpenID和消息内容
-            openid = xml_dict.get('FromUserName')
-            content = xml_dict.get('Content', '').strip()
-            
-            # 从 cache 中查找
-            cache_key = f'wechat_login_{content}'
-            session_data = cache.get(cache_key)
-
-            if session_data:
-                session_data['openid'] = openid
-                cache.set(cache_key, session_data, timeout=300)
-
-                # 查找或创建用户
-                user, created = User.objects.get_or_create(
-                    username=f'wechat_{openid}',
-                    defaults={'is_active': True}
-                )
-                
-                # 如果是新用户，创建免费会员资格
-                if created:
-                    # 使用 OpenID 获取用户信息（暂无信息可用）
-                    user_wechat = User.objects.get(username=f'wechat_{openid}')
-                    # 添加到默认组
-                    default_group = Group.objects.get(name=settings.DEFAULT_USER_GROUPS['NORMAL_USER'])
-                    user_wechat.groups.add(default_group)
-                    # 添加会员
-                    user_membership_type = MembershipType.objects.get(name="Premium Monthly")
-                    Membership.objects.create(
-                        user=user_wechat,
-                        membership_type=user_membership_type,
-                        is_active=True
-                    )
-
-                # 构建回复消息
-                reply_msg = f"""<xml>
-                    <ToUserName><![CDATA[{openid}]]></ToUserName>
-                    <FromUserName><![CDATA[{xml_dict['ToUserName']}]]></FromUserName>
-                    <CreateTime>{int(time.time())}</CreateTime>
-                    <MsgType><![CDATA[text]]></MsgType>
-                    <Content><![CDATA[欢迎回来！]]></Content>
-                </xml>"""
-                
-                return HttpResponse(reply_msg, content_type='application/xml')
-            else:
-                return HttpResponse("success")
-            
-        except Exception as e:
-            logger.error(f"微信消息处理错误: {str(e)}")
-            # 如果处理出错，返回success避免微信服务器重试
-            return HttpResponse("success")
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')

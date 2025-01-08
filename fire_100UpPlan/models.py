@@ -305,38 +305,39 @@ class IndexData(BaseMarketData):
 
 class BondData(BaseMarketData):
     """可转债数据"""
-    subscription_date = models.DateField('申购日期', null=True)
-    subscription_code = models.CharField('申购代码', max_length=50, null=True)
-    subscription_announcement_date = models.DateField('中签号发布日', null=True)
-    subscription_record_date = models.DateField('原股东配售-股权登记日', null=True)
-    subscription_per_share = models.FloatField('原股东配售-每股配售额', null=True)
-    subscription_rate = models.FloatField('中签率', null=True)
-    listing_date = models.DateField('上市时间', null=True)
-    close = models.FloatField('现价')
-    stock_code = models.CharField('正股代码', max_length=50, null=True)
-    stock_name = models.CharField('正股名称', max_length=100, null=True)
-    stock_price = models.FloatField('正股价', null=True)
-    stock_pb = models.FloatField('正股PB', null=True) 
-    stock_industry_pb_ratio_median = models.FloatField('行业中位数PB', null=True) 
-    stock_pe_ttm_ratio = models.FloatField('正股TTM PE', null=True) 
-    stock_industry_pe_ttm_ratio_median = models.FloatField('行业中位数TTM PE', null=True) 
-    convertible_price = models.FloatField('转股价', null=True)
-    convertible_value = models.FloatField('转股价值', null=True)
-    premium_rate = models.FloatField('转股溢价率', null=True)  # 单位: %
-    bond_rating = models.CharField('债券评级', max_length=50, null=True)
-    issue_size = models.FloatField('发行规模', null=True)  # 单位: 亿元
-    remaining_size = models.FloatField('剩余规模', null=True)  # 单位: 亿元
-    ytm_before_tax = models.FloatField('到期税前收益', null=True)  # 单位: % # 无
-    maturity_date = models.DateField('到期时间', null=True)
-    double_low = models.FloatField('双低', null=True) 
-    
+    subscription_date = models.DateField('申购日期', null=True, blank=True)
+    subscription_code = models.CharField('申购代码', max_length=50, null=True, blank=True)
+    subscription_announcement_date = models.DateField('中签号发布日', null=True, blank=True)
+    subscription_record_date = models.DateField('原股东配售-股权登记日', null=True, blank=True)
+    subscription_per_share = models.FloatField('原股东配售-每股配售额', null=True, blank=True)
+    subscription_rate = models.FloatField('中签率', null=True, blank=True)
+    listing_date = models.DateField('上市时间', null=True, blank=True)
+    close = models.FloatField('现价', null=True, blank=True)
+    stock_code = models.CharField('正股代码', max_length=50, null=True, blank=True)
+    stock_name = models.CharField('正股名称', max_length=100, null=True, blank=True)
+    stock_price = models.FloatField('正股价', null=True, blank=True)
+    stock_pb = models.FloatField('正股PB', null=True, blank=True) 
+    stock_industry_pb_ratio_median = models.FloatField('行业中位数PB', null=True, blank=True) 
+    stock_pe_ttm_ratio = models.FloatField('正股TTM PE', null=True, blank=True) 
+    stock_industry_pe_ttm_ratio_median = models.FloatField('行业中位数TTM PE', null=True, blank=True) 
+    convertible_price = models.FloatField('转股价', null=True, blank=True)
+    convertible_value = models.FloatField('转股价值', null=True, blank=True)
+    premium_rate = models.FloatField('转股溢价率', null=True, blank=True)  # 单位: %
+    bond_rating = models.CharField('债券评级', max_length=50, null=True, blank=True)
+    issue_size = models.FloatField('发行规模', null=True, blank=True)  # 单位: 亿元
+    remaining_size = models.FloatField('剩余规模', null=True, blank=True)  # 单位: 亿元
+    ytm_before_tax = models.FloatField('到期税前收益', null=True, blank=True)  # 单位: % # 无
+    maturity_date = models.DateField('到期时间', null=True, blank=True)
+    double_low = models.FloatField('双低', null=True, blank=True) 
+    is_risk_excluded = models.BooleanField('手动排除', null=True, default=False, blank=True) # 手动风险排除
+
     # 强赎相关信息
-    is_callable = models.CharField('强赎状态', max_length=50, null=True)
-    redemption_trigger_price = models.FloatField('强赎触发价', null=True)
-    redemption_price = models.FloatField('强赎价格', null=True)
-    redemption_countdown = models.CharField('强赎倒计时', max_length=50, null=True)
-    convertible_start_date = models.DateField('转股起始日', null=True)
-    last_trading_date = models.DateField('最后交易日', null=True)
+    is_callable = models.CharField('强赎状态', max_length=50, null=True, blank=True)
+    redemption_trigger_price = models.FloatField('强赎触发价', null=True, blank=True)
+    redemption_price = models.FloatField('强赎价格', null=True, blank=True)
+    redemption_countdown = models.CharField('强赎倒计时', max_length=50, null=True, blank=True)
+    convertible_start_date = models.DateField('转股起始日', null=True, blank=True)
+    last_trading_date = models.DateField('最后交易日', null=True, blank=True)
 
     class Meta:
         db_table = 'market_bond_data'
@@ -391,24 +392,5 @@ class FundData(BaseMarketData):
         verbose_name = '基金数据'
         verbose_name_plural = verbose_name
 
-class WeChatMenu(models.Model):
-    name = models.CharField('菜单名称', max_length=64)
-    type = models.CharField('类型', max_length=20, choices=[
-        ('click', '点击'),
-        ('view', '视图'),
-    ])
-    key = models.CharField('菜单KEY', max_length=128, blank=True)
-    url = models.URLField('跳转链接', blank=True)
-    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='sub_buttons')
-    order = models.IntegerField('排序', default=0)
-    created_at = models.DateTimeField('创建时间', auto_now_add=True)
-    updated_at = models.DateTimeField('更新时间', auto_now=True)
 
-    class Meta:
-        verbose_name = '微信菜单'
-        verbose_name_plural = '微信菜单'
-        ordering = ['order']
-
-    def __str__(self):
-        return self.name
 

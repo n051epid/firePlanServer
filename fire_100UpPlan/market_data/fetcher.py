@@ -16,6 +16,7 @@ from scipy import stats
 import json
 from playwright.sync_api import sync_playwright
 
+logger = logging.getLogger(__name__)
 
 
 
@@ -52,36 +53,82 @@ class MarketDataFetcher:
             # 获取上证指数行情
             sh_index = ak.stock_zh_index_daily(symbol="sh000001")
             sh_index['date'] = pd.to_datetime(sh_index['date'])
-            latest_sh_index = sh_index[sh_index['date']==today]['close'].iloc[0]
+            
+            # 添加数据验证
+            latest_sh_data = sh_index[sh_index['date'].dt.strftime('%Y%m%d')==today]
+            if latest_sh_data.empty:
+                return {
+                    'status': 'error',
+                    'message': f'No Shanghai index data found for date {today}'
+                }
+            
+            latest_sh_index = latest_sh_data['close'].iloc[0]
             
             # 获取上证指数估值数据
             sh_pe = ak.stock_market_pe_lg(symbol="上证")
             sh_pb = ak.stock_market_pb_lg(symbol="上证")
             
+            if sh_pe.empty or sh_pb.empty:
+                return {
+                    'status': 'error',
+                    'message': 'Failed to fetch Shanghai index PE/PB data'
+                }
+            
             # 计算12年前的日期
             current_date = pd.Timestamp(today)
             twelve_years_ago = current_date - pd.DateOffset(years=12)
             
+            # 添加数据验证
             dates = pd.to_datetime(sh_pe['日期'])
             latest_12_sh_pe_valuation = sh_pe[dates >= twelve_years_ago]
+            if latest_12_sh_pe_valuation.empty:
+                return {
+                    'status': 'error',
+                    'message': 'No PE data found for the last 12 years'
+                }
             
             dates = pd.to_datetime(sh_pb['日期'])
             latest_12_sh_pb_valuation = sh_pb[dates >= twelve_years_ago]
+            if latest_12_sh_pb_valuation.empty:
+                return {
+                    'status': 'error',
+                    'message': 'No PB data found for the last 12 years'
+                }
             
             pe_series = latest_12_sh_pe_valuation["平均市盈率"]
             pb_series = latest_12_sh_pb_valuation["市净率"]
             
-            current_sh_pe = float(pe_series.iloc[-1])
-            current_sh_pb = float(pb_series.iloc[-1])
+            # 添加数据验证
+            if pe_series.empty or pb_series.empty:
+                return {
+                    'status': 'error',
+                    'message': 'PE or PB series is empty'
+                }
             
-            sh_pe_rank = len(pe_series[pe_series <= current_sh_pe]) / len(pe_series) * 100
-            sh_pb_rank = len(pb_series[pb_series <= current_sh_pb]) / len(pb_series) * 100
-
-
+            # 添加数据验证
+            try:
+                current_sh_pe = float(pe_series.iloc[-1])
+                current_sh_pb = float(pb_series.iloc[-1])
+            except (IndexError, ValueError) as e:
+                return {
+                    'status': 'error',
+                    'message': f'Error processing PE/PB values: {str(e)}'
+                }
+            
+            # 添加数据验证
+            try:
+                sh_pe_rank = len(pe_series[pe_series <= current_sh_pe]) / len(pe_series) * 100
+                sh_pb_rank = len(pb_series[pb_series <= current_sh_pb]) / len(pb_series) * 100
+            except Exception as e:
+                return {
+                    'status': 'error',
+                    'message': f'Error calculating PE/PB ranks: {str(e)}'
+                }
 
             # 通过下载表格，获取全市场的估值数据
             # today = '20241212'
-            url = f'https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/dl_resource/industry_pe/bk{today}.zip'
+            # url = f'https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/dl_resource/industry_pe/bk{today}.zip'
+            url = f'https://oss-ch.csindex.com.cn/dl_resource/industry_pe/bk{today}.zip'
             
             # 沪深市场，不包括北交所（京市），近 12 年历史估值区间（2012-01-01 至 2024-11-16）。数据来源：https://legulegu.com/stockdata/a-pe。
             # 暂无沪深历史动态市盈率数据
@@ -194,9 +241,15 @@ class MarketDataFetcher:
                     )
 
                     # 平权计算三个指标（全市场 PE_Rank、全市场 PB_Rank、指数温度）
-                    market_temperature = (pe_rank + pb_rank + market_temperatures_index[0]['percentile'])/3
+                    if market_temperatures_index:
+                        logger.info('==================== 有指数温度数据 ====================')
+                        market_temperature = (pe_rank + pb_rank + market_temperatures_index[0]['percentile'])/3
+                    else:
+                        # 如果没有指数温度数据，只使用 PE 和 PB 的 rank
+                        logger.warning('==================== 没有指数温度数据 ====================')
+                        market_temperature = (pe_rank + pb_rank)/2
                     
-                    # 清���临时文件
+                    # 清空临时文件
                     os.remove(xls_path)
             
             # 获取东方财富网-沪深京 A 股-实时行情数据
@@ -236,7 +289,7 @@ class MarketDataFetcher:
                     existing.save()
                     return {
                         'status': 'success',
-                        'message': 'Market valuation data updated'+str(valuation.pe_range_percentile)+str(valuation.pb_range_percentile)
+                        'message': 'Market valuation data updated,market_temperature: '+str(valuation.market_temperature)
                     }
                 else:
                     valuation.save()
@@ -432,7 +485,8 @@ class MarketDataFetcher:
         try:
             # today = datetime.now().strftime('%Y%m%d')
             today = date
-            url = f'https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/dl_resource/industry_pe/{today}.zip'
+            # url = f'https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/dl_resource/industry_pe/{today}.zip'
+            url = f'https://oss-ch.csindex.com.cn/dl_resource/industry_pe/{today}.zip'
             response = requests.get(url)
             if response.status_code == 200:
                 with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
@@ -1284,6 +1338,11 @@ class ConvertibleBondMarketDataFetcher:
                 'parent_industry_pe_ttm_ratio_median'
             )
             
+            # 获取已手动标记风险的数据
+            risk_excluded_data = BondData.objects.filter(is_risk_excluded=True).values('code')
+            risk_excluded_code_list = [item['code'] for item in risk_excluded_data]
+            logger.info(f"已手动标记风险 code list: {risk_excluded_code_list}")
+
             bond_data_dict = {}
             
             for _, row in bond_cb_df.iterrows():
@@ -1372,6 +1431,13 @@ class ConvertibleBondMarketDataFetcher:
                                 'maturity_date': parse_date(redeem_info.get('到期日')),
                                 'remaining_size': float(redeem_info.get('剩余规模', 0)),  # 单位: 亿元
                             })
+                    
+                    # 继承手动排风险的状态
+                    if bond_data['code'] in risk_excluded_code_list:
+                        bond_data['is_risk_excluded'] = True
+                    else:
+                        bond_data['is_risk_excluded'] = False
+                    
                     
                     bond_data_dict[bond_data['code']] = bond_data
                     

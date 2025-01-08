@@ -20,4 +20,5 @@ from django.urls import path, include
 urlpatterns = [
     path('61c24820324231ece258c9da06e29867/', admin.site.urls),
     path('v1/', include('fire_100UpPlan.urls')),  # 包含应用级 URLs
+    path('v1/wechat', include('weixin_offiaccount.urls')),  # 包含微信公众号相关 URLs
 ]

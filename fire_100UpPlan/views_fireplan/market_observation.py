@@ -23,6 +23,7 @@ from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 
+logger = logging.getLogger(__name__)
 
 class MarketValuationView(APIView):
     """市场估值视图"""
@@ -77,6 +78,7 @@ class MarketValuationView(APIView):
                     "ratio": latest_valuation.get("pb_ratio"),
                     "range_percentile": latest_valuation.get("pb_range_percentile"),
                 },
+                "dividend_ratio": latest_valuation.get("dividend_ratio"),
                 "sh_index": {
                     "close": latest_valuation.get("sh_index"),
                     "trend": sh_trend,
@@ -103,14 +105,14 @@ class MarketValuationView(APIView):
                 'code', 
                 'name'
             ).distinct().order_by('code')
-            
-            # 使用最新日期获取完整数据
+
+            # 获取这些日期的完整数据
             index_data = IndexData.objects.filter(
                 code__in=[idx['code'] for idx in main_indices],
-                date=models.Subquery(
+                date__in=models.Subquery(
                     IndexData.objects.filter(
                         code=models.OuterRef('code')
-                    ).values('date').order_by('-date')[:1]
+                    ).values('date').order_by('-date')[:2]
                 )
             ).values(
                 'code',
@@ -119,20 +121,39 @@ class MarketValuationView(APIView):
                 'close',
                 'pe_ttm_ratio',
                 'percentile'
-            ).order_by('code')
-            
-            # 转换为列表并格式化数据
-            result = []
+            ).order_by('code', '-date')  # 按代码升序、日期降序排列
+
+            # 将数据重组为字典格式,便于访问
+            index_dict = {}
             for item in index_data:
-                result.append({
-                    'code': item['code'],
-                    'name': item['name'],
-                    'date': item['date'],
-                    'close': round(item['close'], 2) if item['close'] is not None else None,
-                    'pe_ttm_ratio': round(item['pe_ttm_ratio'], 2) if item['pe_ttm_ratio'] is not None else None,
-                    'percentile': round(item['percentile'], 2) if item['percentile'] is not None else None,
-                })
-            
+                if item['code'] not in index_dict:
+                    index_dict[item['code']] = []
+                index_dict[item['code']].append(item)
+
+            # 处理每个指数的数据
+            result = []
+            for data_list in index_dict.values():  # 直接使用 values() 而不是 items()
+                if len(data_list) >= 2:  # 确保有两天的数据
+                    latest = data_list[0]
+                    previous = data_list[1]
+                    
+                    # 比较大小，计算趋势
+                    trend, sentiment = MarketValuationView._compare_market_temperatures(
+                        latest['percentile'], 
+                        previous['percentile']
+                    )
+                    
+                    result.append({
+                        'code': latest['code'],
+                        'name': latest['name'],
+                        'date': latest['date'],
+                        'close': round(latest['close'], 2) if latest['close'] is not None else None,
+                        'pe_ttm_ratio': round(latest['pe_ttm_ratio'], 2) if latest['pe_ttm_ratio'] is not None else None,
+                        'percentile': round(latest['percentile'], 2) if latest['percentile'] is not None else None,
+                        'trend': trend,
+                        'sentiment': sentiment
+                    })
+
             return result
         
         except Exception as e:
@@ -215,7 +236,9 @@ class MarketValuationView(APIView):
     def _compare_market_temperatures(latest_temperature, previous_temperature):
         """根据市场温度判断估值水平"""
         # 判断温度上升还是下降
+        # logger.info(f"latest_temperature: {latest_temperature}, previous_temperature: {previous_temperature}")
         diff = round(latest_temperature, 0) - round(previous_temperature, 0)
+
         if diff > 0:
             trend = "↑"
         elif diff < 0:
@@ -547,7 +570,7 @@ class ConvertibleBondMarketDataView(APIView):
         
 
     def _get_convertible_bond_smallsize_data(self):
-        """获取可转债市场数据"""
+        """获取可转债小盘策略数据"""
         try:
             # 获取最新日期
             latest_date = BondData.objects.latest('date').date
@@ -578,6 +601,7 @@ class ConvertibleBondMarketDataView(APIView):
                 models.Q(stock_price__isnull=True) |  # 正股价为空
                 ~models.Q(bond_rating__startswith='A') |  # 评级是A及以下
                 models.Q(bond_rating__isnull=True) |  # 评级为空
+                models.Q(is_risk_excluded=True) |  # 手动标记风险
                 # models.Q(double_low__gt=300) | # 双低值高于 300
                 # models.Q(stock_pe_ttm_ratio__isnull=True) |  # 正股 TTM PE 为空
                 # models.Q(stock_industry_pb_ratio_median__lt=models.F('stock_pb')) |  # 正股 PB 小于行业中位数PB
@@ -615,7 +639,8 @@ class ConvertibleBondMarketDataView(APIView):
                 models.Q(listing_date__isnull=True) | # 上市时间为空
                 models.Q(maturity_date__isnull=True) | # 到期日为空
                 models.Q(bond_rating__isnull=True) |  # 评级为空
-                models.Q(stock_price__lt=2) # 正股价小于2元
+                models.Q(stock_price__lt=2) | # 正股价小于2元
+                models.Q(is_risk_excluded=True) # 手动标记风险
                 # models.Q(stock_pb__lt=1)  # 正股 pb 小于 1 （新增，待查看效果）
             ).values(
                 'code', 
@@ -690,25 +715,40 @@ class KimiChatView(View):
                 messages=[
                     {
                         "role": "system",
-                        # "content": "你是 Kimi，由 Moonshot AI 提供的人工智能助手，你擅长可转债投资策略，有丰富的可转债及股票市场知识。你会为用户提供安全，有帮助，准确的回答。同时，你会拒绝一切涉及恐怖主义，种族歧视，黄色暴力等问题的回答。如果用户提到需要分析某个可转债或可转债代码，则请按照如下示例进行分析：领益智造主要从事精密功能件、结构件、模组及充电器等业务。转债质地：信用评级AA+，税后年化1.63%，净资产收益率3%，毛利率15%，资产负债率52%。市盈率51市净率3.3，发行规模21.374亿。个人看法：最新转股价值96，期望115元左右上市。"
-                        "content": "你是 Kimi，由 Moonshot AI 提供的人工智能助手，你擅长可转债投资策略，有丰富的可转债及股票市场知识。你会为用户提供安全，有帮助，准确的回答。同时，你会拒绝一切涉及恐怖主义，种族歧视，黄色暴力等问题的回答。",
+                        "content": "你是 Kimi，由 Moonshot AI 提供的人工智能助手，你擅长可转债投资策略，有丰富的可转债及股票市场知识。你可以联网查询各种可转债市场的数据。你会为用户提供安全，有帮助，准确的回答。同时，你会拒绝一切涉及恐怖主义，种族歧视，黄色暴力等问题的回答。请在回答中引用搜索结果的来源。",
                     },
-                    *messages,
-                    {
-                        "role": "assistant",
-                        "content": " ",
-                        "partial": True
-                    }
+                    *messages
                 ],
                 temperature=0.1,
+                tools=[
+                        {
+                            "type": "builtin_function",
+                            "function": {
+                                "name": "$web_search",
+                            },
+                        }
+                    ],
+                # tool_choice="auto",
                 stop=["stopF.I.R.E"],
                 stream=True
             )
 
             for chunk in response:
-                if hasattr(chunk.choices[0].delta, 'content'):
-                    if chunk.choices[0].delta.content is not None:
+                try:
+                    if chunk.choices[0].delta.content:
                         yield f"data: {chunk.choices[0].delta.content}\n\n"
+                    elif chunk.choices[0].delta.tool_calls:
+                        for tool_call in chunk.choices[0].delta.tool_calls:
+                            if tool_call.function.name == "$web_search":
+                                try:
+                                    search_results = json.loads(tool_call.function.arguments)
+                                    yield f"data: [搜索结果] {json.dumps(search_results, ensure_ascii=False)}\n\n"
+                                except json.JSONDecodeError as e:
+                                    logging.error(f"搜索结果解析失败: {e}")
+                                    yield f"data: [错误] 搜索结果解析失败\n\n"
+                except AttributeError as e:
+                    logging.error(f"处理响应块时出错: {e}")
+                    continue
 
             yield "data: [DONE]\n\n"
 

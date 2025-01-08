@@ -109,6 +109,7 @@ INSTALLED_APPS = [
     'django_extensions',
     'corsheaders',
     'fire_100UpPlan',
+    'weixin_offiaccount',
     'django.contrib.sites',
     'allauth',
     'allauth.account',
@@ -313,11 +314,23 @@ BCC_EMAIL = os.environ.get('BCC_EMAIL')
 JISILU_API_COOKIE = os.environ.get('JISILU_API_COOKIE')
 
 
-# 微信配置
-WECHAT_APP_ID = os.environ.get('WECHAT_APP_ID')
-WECHAT_APP_SECRET = os.environ.get('WECHAT_APP_SECRET')
-WECHAT_TOKEN = os.environ.get('WECHAT_TOKEN')
-WECHAT_QRCODE_URL = os.environ.get('WECHAT_QRCODE_URL')
+# FIRE轻旅，微信配置
+WECHAT_APP_ID_QINGLV = os.environ.get('WECHAT_APP_ID_QINGLV')
+WECHAT_APP_SECRET_QINGLV = os.environ.get('WECHAT_APP_SECRET_QINGLV')
+WECHAT_TOKEN_QINGLV = os.environ.get('WECHAT_TOKEN_QINGLV')
+WECHAT_QRCODE_URL_QINGLV = os.environ.get('WECHAT_QRCODE_URL_QINGLV')
+WECHAT_AUTO_SYNC_DRAFT = True  # 是否自动同步到草稿箱
+WECHAT_AUTHOR_NAME_QINGLV = os.environ.get('WECHAT_AUTHOR_NAME_QINGLV')  # 作者名称
+WECHAT_DEFAULT_THUMB_MEDIA_ID_QINGLV = os.environ.get('WECHAT_DEFAULT_THUMB_MEDIA_ID_QINGLV')  # 默认封面图的media_id
+
+# 黑胡子说，微信配置
+WECHAT_APP_ID_BLACK13EARD = os.environ.get('WECHAT_APP_ID_BLACK13EARD')
+WECHAT_APP_SECRET_BLACK13EARD = os.environ.get('WECHAT_APP_SECRET_BLACK13EARD')
+WECHAT_TOKEN_BLACK13EARD = os.environ.get('WECHAT_TOKEN_BLACK13EARD')
+WECHAT_QRCODE_URL_BLACK13EARD = os.environ.get('WECHAT_QRCODE_URL_BLACK13EARD')
+WECHAT_AUTO_SYNC_DRAFT = True  # 是否自动同步到草稿箱
+WECHAT_AUTHOR_NAME_BLACK13EARD = os.environ.get('WECHAT_AUTHOR_NAME_BLACK13EARD')  # 作者名称
+WECHAT_DEFAULT_THUMB_MEDIA_ID_BLACK13EARD = os.environ.get('WECHAT_DEFAULT_THUMB_MEDIA_ID_BLACK13EARD')  # 默认封面图的media_id
 
 
 # Redis 缓存设置
@@ -370,6 +383,10 @@ CELERY_BEAT_SCHEDULE = {
     'refresh-database-cache': {
         'task': 'fire_100UpPlan.tasks.refresh_database_cache',
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=40),  # 每天19:40执行
+    },
+    'fetch-daily-market-data2': {
+        'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
+        'schedule': crontab(hour=23, minute=00),  # 备份计划，每天23:00执行
     }
 }
 
@@ -401,10 +418,14 @@ LOGGING = {
             'class': 'logging.FileHandler',
             'filename': LOG_FILE_PATH,
         },
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+        },
     },
     'loggers': {
         'django': {
-            'handlers': ['file'],
+            'handlers': ['file', 'console'],
             'level': 'INFO',
             'propagate': True,
         },
