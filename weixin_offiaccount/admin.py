@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib import messages
 from .models import WeChatMenu
-from .utils import wechat_token_qinglv
+from .utils import wechat_token_qinglv, wechat_token_black13eard
 import requests
 import json
 
@@ -52,7 +52,9 @@ class WeChatMenuAdmin(admin.ModelAdmin):
 
         # 调用微信接口
         access_token = wechat_token_qinglv.get_access_token()
-        print("access_token: ", access_token)
+        access_token2 = wechat_token_black13eard.get_access_token()
+        print("access_token_qinglv: ", access_token)
+        print("access_token_black13eard: ", access_token2)
 
         if not access_token:
             self.message_user(request, "获取access_token失败", level=messages.ERROR)

@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from datetime import datetime, timedelta
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db import models
 from fire_100UpPlan.models import MarketValuation, IndexData, MarginTradingData, IndustryValuation, BondIndexData, BondData, BigDataStrategyStockData
 from django.db.models import Max
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class MarketValuationView(APIView):
     """市场估值视图"""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     
     @method_decorator(cache_page(60 * 30))  # 缓存 30分钟
     def get(self, request):

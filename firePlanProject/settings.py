@@ -384,9 +384,17 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'fire_100UpPlan.tasks.refresh_database_cache',
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=40),  # 每天19:40执行
     },
+    'generate-daily-article': {
+        'task': 'weixin_offiaccount.tasks.generate_daily_article',
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=45, day_of_week='sunday'),  # 每周日指定时间执行
+    },
     'fetch-daily-market-data2': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
         'schedule': crontab(hour=23, minute=00),  # 备份计划，每天23:00执行
+    },
+    'fetch_convertible_bond_data2': {
+        'task': 'fire_100UpPlan.tasks.fetch_convertible_bond_data',
+        'schedule': crontab(hour=7, minute=00),  # 公告信息更新，每天7:00执行
     }
 }
 
@@ -412,19 +420,46 @@ SOCIALACCOUNT_PROVIDERS = {
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
         'file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
             'filename': LOG_FILE_PATH,
+            'formatter': 'verbose',
         },
         'console': {
             'level': 'INFO',
             'class': 'logging.StreamHandler',
+            'formatter': 'simple',
         },
     },
     'loggers': {
         'django': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'fire_100UpPlan': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'weixin_offiaccount': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'celery': {
             'handlers': ['file', 'console'],
             'level': 'INFO',
             'propagate': True,

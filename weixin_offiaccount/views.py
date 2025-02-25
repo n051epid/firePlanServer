@@ -19,7 +19,7 @@ import logging
 import random
 import string
 from fire_100UpPlan.models import Membership, MembershipType
-from fire_100UpPlan.views_fireplan.market_observation import MarketValuationView, ConvertibleBondMarketDataView
+from fire_100UpPlan.views_fireplan.market_observation import MarketValuationView,ConvertibleBondMarketDataView
 from .utils import wechat_token_qinglv, wechat_token_black13eard, sync_to_wechat_draft
 from datetime import datetime
 import html
@@ -63,7 +63,7 @@ class KimiChatView(APIView):
                     messages=[
                         *messages
                     ],
-                    temperature=0.1,
+                    temperature=0.0,
                     tools=[
                         {
                             "type": "builtin_function",
@@ -169,6 +169,36 @@ class WeChatAPIView(APIView):
 
 class WechatAccountView(APIView):
     def get(self, request):
+        logger.info("Received request at /v1/wechat/")
+        logger.debug("Request parameters: %s", request.GET)
+        
+        # 首先检查是否是微信服务器的验证请求
+        signature = request.GET.get('signature')
+        timestamp = request.GET.get('timestamp')
+        nonce = request.GET.get('nonce')
+        echostr = request.GET.get('echostr')
+        
+        # 如果是微信验证请求
+        if all([signature, timestamp, nonce, echostr]):
+            logger.info("Received WeChat verification request: signature=%s, timestamp=%s, nonce=%s, echostr=%s",
+                       signature, timestamp, nonce, echostr)
+            
+            # token = settings.WECHAT_TOKEN_QINGLV
+            token = settings.WECHAT_TOKEN_BLACK13EARD
+            
+            temp_list = [token, timestamp, nonce]
+            temp_list.sort()
+            temp_str = ''.join(temp_list)
+            
+            sha1 = hashlib.sha1()
+            sha1.update(temp_str.encode('utf-8'))
+            hashcode = sha1.hexdigest()
+            
+            if hashcode == signature:
+                return HttpResponse(echostr)
+            return HttpResponse("验证失败")
+            
+        # 如果是普通的 GET 请求，继续原有的验证码逻辑
         verification_code = request.GET.get('verification_code')
         
         if not verification_code:
@@ -403,8 +433,14 @@ class WechatAccountView(APIView):
 
 
 class MarketValuationSyncView(APIView):
+    # 获取市场估值数据及可转债数据，生成文本内容，推送到微信公众号
+    permission_classes = [IsAuthenticated]
+
     def get(self, request):
         try:
+            # 设置更长的超时时间
+            request.META['HTTP_TIMEOUT'] = '300'  # 5分钟超时
+
             # 构建第一篇文章：市场整体估值。从 fire_100UpPlan 获取市场估值数据
             market_view = MarketValuationView()
             response = market_view.get(request)
@@ -415,9 +451,10 @@ class MarketValuationSyncView(APIView):
             data = response.data['data']
             
             # 从 index_data 中获取所有的指数数据
-            index_data = data['index_data']
-            market_overview = data['market_overview']
-            market_sentiment = data['market_sentiment']
+            index_data = data['index_data'] # 指数数据
+            market_overview = data['market_overview'] # 市场整体估值
+            market_sentiment = data['market_sentiment'] # 市场情绪
+            industry_valuation = data['industry_valuation'] # 行业整体估值
 
             # 构建标题
             title_0=f"今日市场估值（{market_overview['date']}）"
@@ -426,14 +463,14 @@ class MarketValuationSyncView(APIView):
             digest_0 = f"""最新温度：{int(market_sentiment['market_temperature']['temperature'])}° {get_trend_text(market_sentiment['market_temperature'].get('temperature_trend', '-'))}，全市场处于{get_status_text(market_sentiment['market_temperature'].get('market_sentiment', '-'))}状态 """
             thumb_media_id_0 = settings.WECHAT_DEFAULT_THUMB_MEDIA_ID_BLACK13EARD
 
-            # 构建文章首位内容
+            # 构建文章结尾签名
             bottom_content = f"""<p style="text-align: right;"><span style="font-size: 12px; color: #999; font-style: italic;">**以上来源于公开数据，仅供参考**</span></p>"""
             bottom_signature_black13eard = f"""<section style="font-size: 14px; line-height: 2; color: rgb(62, 62, 62); visibility: visible;"><p style="visibility: visible;"><br style="visibility: visible;"></p><section style="margin-top: 0.5em; margin-bottom: 0.5em; visibility: visible;"><section style="display: inline-block; vertical-align: top; margin-top: 0.5em; margin-bottom: 0.5em; width: 100%; visibility: visible;"><section style="visibility: visible;"><section style="box-shadow: rgba(159, 160, 160, 0.5) 0px 0px 10px; padding: 10px; display: inline-block; vertical-align: top; visibility: visible;"><section style="box-shadow: rgba(0, 0, 0, 0.29) 0px 0px 10px inset; padding: 7px; visibility: visible;"><section style="text-align: center; line-height: 0; visibility: visible;"><section style="vertical-align: middle; display: inline-block; line-height: 0; visibility: visible;"><img class="rich_pages wxw-img" data-imgfileid="100000125" data-ratio="0.75" data-s="300,640" data-src="https://mmbiz.qpic.cn/mmbiz_jpg/Y1ciargAZx1CoYhEz7FKDjJtPCXgLXOqI2wEGlfrjYeA7qKic9e3DmfYo9ic6yUK7GicPiaKyFLrN13DvuIDCJianG9A/640?wx_fmt=jpeg&amp;from=appmsg" data-type="jpeg" data-w="1080" style="vertical-align: middle; width: 643px !important; height: auto !important; visibility: visible !important;" data-original-style="vertical-align: middle;width: 100%;" data-index="1" src="https://mmbiz.qpic.cn/mmbiz_jpg/Y1ciargAZx1CoYhEz7FKDjJtPCXgLXOqI2wEGlfrjYeA7qKic9e3DmfYo9ic6yUK7GicPiaKyFLrN13DvuIDCJianG9A/640?wx_fmt=jpeg&amp;from=appmsg&amp;tp=webp&amp;wxfrom=5&amp;wx_lazy=1&amp;wx_co=1" _width="100%" crossorigin="anonymous" alt="图片" data-fail="0"></section></section><section style="clear: both; visibility: visible;"><svg viewBox="0 0 1 1" style="float: left; line-height: 0; width: 0px; vertical-align: top; visibility: visible;"></svg></section></section></section></section><section style="padding-top: 5px; padding-bottom: 5px; visibility: visible;"><section style="font-size: 8px; text-align: right; visibility: visible;"><p style="visibility: visible;"><br style="visibility: visible;"></p></section></section><section style="color: rgba(0, 0, 0, 0.61);text-align: right;"><p>蜀之鄙有二僧，其一贫，其一富。</p><p>贫者语于富者曰：「吾欲之南海，何如？」</p><p>富者曰：「子何恃而往？」</p><p>曰：「吾一瓶一钵足矣。」</p><p>富者曰：「吾数年来欲买舟而下，犹未能也。</p><p>子何持而往！」</p><p>越明年，贫者自南海还。</p><p><br></p></section></section></section><section class="mp_profile_iframe_wrp"><mp-common-profile class="js_uneditable custom_select_card mp_profile_iframe mp_common_widget js_wx_tap_highlight" data-pluginname="mpprofile" data-id="Mzk1NzM0OTAzMw==" data-headimg="http://mmbiz.qpic.cn/mmbiz_png/Y1ciargAZx1CcpZhWPeQd098IAbG69FXXqHczLt8mMW5KSnfBmVrq4qrIsxWPLvlpLnrn0wO0KVmicWtTDj4YJrQ/300?wx_fmt=png&amp;wxfrom=19" data-nickname="FIRE轻旅" data-alias="fireqinglv" data-signature="践行 F.I.R.E 理念，倡导简约自由的轻旅生活。" data-from="0" data-is_biz_ban="0" data-service_type="1" data-origin_num="0" data-isban="0" data-biz_account_status="0" data-index="0"></mp-common-profile></section></section>"""
 
             # 构建正文内容
             content_0 = f"""
-<section style="font-size: 14px; padding: 10px;"><section style="margin: 20px 0;"><h3 style="color: #333; font-weight: bold;">◆ 市场整体估值</h3><p><br>
-<span style="font-size: 14px;">最新温度：<span style="color: {get_status_color(market_sentiment['market_temperature'].get('market_sentiment', '-'))}; font-weight: bold;">{int(market_sentiment['market_temperature']['temperature'])}°</span> {get_trend_text(market_sentiment['market_temperature'].get('temperature_trend', '-'))}，全市场处于 <span style="color: {get_status_color(market_sentiment['market_temperature'].get('market_sentiment', '-'))}; font-weight: bold;">{get_status_text(market_sentiment['market_temperature'].get('market_sentiment', '-'))}</span> 状态 </span></p><br>
+<section style="font-size: 14px; padding: 10px;"><section style="margin: 10px 0;"><h3 style="color: #333; font-weight: bold;">◆ 市场整体估值</h3><br>
+<span style="font-size: 14px;">最新温度：<span style="color: {get_status_color(market_sentiment['market_temperature'].get('market_sentiment', '-'))}; font-weight: bold;">{int(market_sentiment['market_temperature']['temperature'])}°</span> {get_trend_text(market_sentiment['market_temperature'].get('temperature_trend', '-'))}，全市场处于 <span style="color: {get_status_color(market_sentiment['market_temperature'].get('market_sentiment', '-'))}; font-weight: bold;">{get_status_text(market_sentiment['market_temperature'].get('market_sentiment', '-'))}</span> 状态。</span><br><br>
 <table style="width: 100%; border-collapse: collapse; background-color: #f8f9fa;"><tr style="background-color: #f1f8ff;">
 <th style="padding: 6px; text-align: left; border: 1px solid #eee;">指标</th>
 <th style="padding: 6px; text-align: center; border: 1px solid #eee;">数值</th>
@@ -452,12 +489,21 @@ class MarketValuationSyncView(APIView):
 <td style="padding: 6px; text-align: center; border: 1px solid #eee;">-</td>
 </tr></table></section><section style="margin: 20px 0;"><br>
 
-<h3 style="color: #333; font-weight: bold;">◆ 主要指数估值</h3><p><br>
+<h3 style="color: #333; font-weight: bold;">◆ 主要指数估值</h3><br>
 <table style="width: 100%; border-collapse: collapse; background-color: #f8f9fa;"><tr style="background-color: #f1f8ff;">
 <th style="width: 50%; padding: 6px; text-align: left; border: 1px solid #eee;">指数名称</th>
 <th style="width: 25%; padding: 6px; text-align: center; border: 1px solid #eee;">PE-TTM</th>
 <th style="width: 25%; padding: 6px; text-align: center; border: 1px solid #eee;">指数温度</th>
-</tr>{generate_index_rows(index_data)}</table></section></section>{bottom_content}{bottom_signature_black13eard}
+</tr>{generate_index_rows(index_data)}</table><br>
+
+<h3 style="color: #333; font-weight: bold;">◆ 主要行业估值</h3><br>
+<table style="width: 100%; border-collapse: collapse; background-color: #f8f9fa;"><tr style="background-color: #f1f8ff;">
+<th style="width: 50%; padding: 6px; text-align: left; border: 1px solid #eee;">行业名称</th>
+<th style="width: 25%; padding: 6px; text-align: center; border: 1px solid #eee;">PE-TTM</th>
+<th style="width: 25%; padding: 6px; text-align: center; border: 1px solid #eee;">PB</th>
+</tr>{generate_industry_rows(industry_valuation)}</table><br>
+
+</section></section>{bottom_content}{bottom_signature_black13eard}
 """
             
 
@@ -471,15 +517,15 @@ class MarketValuationSyncView(APIView):
             cb_data = response.data['data']
 
 
-            title_1 = f"可转债市场分析 - 小分队开始行动"
-            digest_1 = f"又到了一年一度的个人所得税申报时间了。"
-            thumb_media_id_1 = '_keMPIcYylD5UoO-1wwN4PJk8IBj-3hGBOPBprRIbwzQ0T3gLu8wUhkH4tY6ObHn'
-            head_img_url = f"http://mmbiz.qpic.cn/sz_mmbiz_jpg/YPR2LvJic9Cm3nBHz8v71c9DrI24azTHRm8ZhgwwsIfnvQLfDYPO9BrYlzkpgGzqjFoCuLTOA2JR9LopS7TBglg/0?from=appmsg"
-            head_content = f"""<header style="background-image: url({head_img_url}); background-size: cover; background-position: center; height: 200px;"></header>"""
+            title_1 = f"「PlanB」今日可转债数据"
+            digest_1 = f"「PlanB」每日财经新闻及可转债市场数据分享"
+            thumb_media_id_1 = '_keMPIcYylD5UoO-1wwN4H_qSiejWTdRVoPLSuWZfnMX_j9iGLnL96E6aMCbQ0kC'
+            head_img_url_covertablebonds = f"https://mmbiz.qpic.cn/sz_mmbiz_png/YPR2LvJic9CmqdXpcLmlFJ48h5lFxibXCibcox7AXFKERoyM2SupvB1Z9FzHnYXkDPavyrpXUKt5nlh3xyaz3aPQg/0?wx_fmt=png&from=appmsg"
+            head_content = f"""<header style="background-image: url({head_img_url_covertablebonds}); background-size: cover; background-position: center; height: 400px;"></header>"""
 
             # 构建今日财经新闻
             content_news = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 今日财经新闻</h3>
-<p>{generate_news_content('news').replace('\n\n', '<br><br>')}</p>"""
+<p>{generate_news_content('news').replace('\n', '<br>')}</p>"""
             
             # 构建可转债市场概况
             content_cb_market_overview = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 可转债市场概况</h3>
@@ -534,19 +580,15 @@ class MarketValuationSyncView(APIView):
 </tr>{generate_cb_redemption_countdown_rows(cb_data['cb_redemption_bonds'])}</table>"""
 
             content_1 = f"""
-{head_content}
-<section style="font-size: 14px; line-height: 2; box-sizing: border-box; font-style: normal; font-weight: 400; text-align: justify; visibility: visible;"><section style="margin: 20px 0;">
-<p>{content_news}</p>
+<section style="font-size: 14px; line-height: 2; box-sizing: border-box; font-style: normal; font-weight: 400; text-align: justify; visibility: visible;">
 <p>{content_cb_market_overview}</p>
 <p>{content_table_doublelow}</p>
 <p>{content_table_small_lowprice}</p>
 <p>{content_table_small_lowpremium_rate}</p>
 <p>{content_table_cb_redemption_public}</p>
 <p>{content_table_cb_redemption_countdown}</p>
-<p><h3 style="color: #333; font-weight: bold;">◆ 个人养老金</h3>
-按照发布的个人养老金政策，我们可以在银行设立一个专门用于存放个人养老金的账户。账户里的钱只进不出，直至退休，里面的钱可以用于自主投资。我们每年缴纳个人养老金的上限为 12000 元，可以自主决定缴多少，本年度内既可以一次性缴也可以分次缴。同时，这部分钱能够享受一定的税收优惠。按照每年缴纳 12000 元，按照每个人的缴税档位，最高可以退 5400 元。</p>
-<p><br>
-</p></section></section>
+
+</p></section>
 
 {bottom_content}{bottom_signature_black13eard}
 """
@@ -643,6 +685,28 @@ def generate_index_rows(index_data):
 """
             rows.append(row)
     return ''.join(rows)
+
+def generate_industry_rows(industry_data):
+    """生成行业行数据的辅助函数"""
+    rows = []
+    for data in industry_data:
+        # 安全地获取数值
+        pb_ratio = data.get('pb_ratio')
+        pe_ttm_ratio = data.get('pe_ttm_ratio')
+        
+        # 格式化显示，如果是 None 则显示 '-'
+        pb_display = f"{pb_ratio:.2f}" if pb_ratio is not None else '-'
+        pe_display = f"{pe_ttm_ratio:.2f}" if pe_ttm_ratio is not None else '-'
+
+        row = f"""<tr>
+<td style="width: 50%; padding: 6px; border: 1px solid #eee;">{data.get('name', '-')}</td>
+<td style="width: 25%; padding: 6px; text-align: center; border: 1px solid #eee;">{pe_display}</td>
+<td style="width: 25%; padding: 6px; text-align: center; border: 1px solid #eee;">{pb_display}</td>
+</tr>
+"""
+        rows.append(row)
+    return ''.join(rows)
+
 
 def generate_cb_doublelow_rows(index_data):
     """生成可转债行数据的辅助函数，只返回前10个数据"""
@@ -794,7 +858,7 @@ def generate_news():
     }
     
     response = kimi_chat.post(request)
-    print(response.data['content'])
+    # print(response.data['content'])
     return response.data['content'] if response.status_code == 200 else "今日暂无重要财经新闻。"
 
 def get_cached_news():
@@ -802,9 +866,9 @@ def get_cached_news():
     cache_key = f'daily_news_{datetime.now().strftime("%Y-%m-%d")}'
     cached_news = cache.get(cache_key)
     
-    if cached_news:
-        print("cached_news:", cached_news)
-        return cached_news
+    #if cached_news:
+        # print("cached_news:", cached_news)
+    #    return cached_news
         
     # 如果没有缓存，生成新内容
     try:
@@ -838,7 +902,7 @@ class MarketValuationSyncView2(APIView):
 
             title_1 = f"可转债今日市场分析"
             digest_1 = f"又到了一年一度的个人所得税申报时间了。"
-            thumb_media_id_1 = '_keMPIcYylD5UoO-1wwN4PJk8IBj-3hGBOPBprRIbwzQ0T3gLu8wUhkH4tY6ObHn'
+            thumb_media_id_1 = '_keMPIcYylD5UoO-1wwN4H_qSiejWTdRVoPLSuWZfnMX_j9iGLnL96E6aMCbQ0kC'
             head_img_url = f"http://mmbiz.qpic.cn/sz_mmbiz_jpg/YPR2LvJic9Cm3nBHz8v71c9DrI24azTHRm8ZhgwwsIfnvQLfDYPO9BrYlzkpgGzqjFoCuLTOA2JR9LopS7TBglg/0?from=appmsg"
             head_content = f"""<header style="background-image: url({head_img_url}); background-size: cover; background-position: center; height: 200px;"></header>"""
 
@@ -850,13 +914,13 @@ class MarketValuationSyncView2(APIView):
 
             content_1 = f"""
 {head_content}
-<section style="font-size: 14px; line-height: 2; box-sizing: border-box; font-style: normal; font-weight: 400; text-align: justify; visibility: visible;"><section style="margin: 20px 0;">
+<section style="font-size: 14px; line-height: 2; box-sizing: border-box; font-style: normal; font-weight: 400; text-align: justify; visibility: visible;">
 <p>{content_news}</p>
 
 <p><h3 style="color: #333; font-weight: bold;">◆ 个人养老金</h3>
-按照发布的个人养老金政策，我们可以在银行设立一个专门用于存放个人养老金的账户。账户里的钱只进不出，直至退休，里面的钱可以用于自主投资。我们每年缴纳个��养老金的上限为 12000 元，可以自主决定缴多少，本年度内既可以一次性缴也可以分次缴。同时，这部分钱能够享受一定的税收优惠。按照每年缴纳 12000 元，按照每个人的缴税档位，最高可以退 5400 元。</p>
+按照发布的个人养老金政策，我们可以在银行设立一个专门用于存放个人养老金的账户。账户里的钱只进不出，直至退休，里面的钱可以用于自主投资。我们每年缴纳个人养老金的上限为 12000 元，可以自主决定缴多少，本年度内既可以一次性缴也可以分次缴。同时，这部分钱能够享受一定的税收优惠。按照每年缴纳 12000 元，按照每个人的缴税档位，最高可以退 5400 元。</p>
 <p><br>
-</p></section></section>
+</p></section>
 
 {bottom_content}{bottom_signature_black13eard}
 """

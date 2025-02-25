@@ -2,6 +2,9 @@ from django.core.management.base import BaseCommand
 from fire_100UpPlan.tasks import fetch_daily_market_data
 from asgiref.sync import sync_to_async
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
     help = '手动触发市场数据采集'
@@ -15,9 +18,7 @@ class Command(BaseCommand):
             loop = asyncio.get_event_loop()
             result = loop.run_until_complete(async_task())
             
-            self.stdout.write(self.style.SUCCESS('数据采集成功'))
+            logger.info("数据采集成功")
             
         except Exception as e:
-            self.stdout.write(
-                self.style.ERROR(f'发生错误: {str(e)}')
-            ) 
+            logger.error("数据采集失败: %s", str(e)) 

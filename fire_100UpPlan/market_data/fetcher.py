@@ -15,6 +15,7 @@ import re
 from scipy import stats
 import json
 from playwright.sync_api import sync_playwright
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -44,14 +45,29 @@ class MarketDataFetcher:
     @staticmethod
     def fetch_daily_market_data(date=None):
         """获取市场整体估值数据"""
+        # logger.info(f"Fetcher: Fetching daily market data for date: {date}")
+
         try:
             if date:
                 today = date
             else:
                 today = datetime.now().strftime('%Y%m%d')
             
+            # 添加请求头(非必要)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            
             # 获取上证指数行情
-            sh_index = ak.stock_zh_index_daily(symbol="sh000001")
+            try:
+                sh_index = ak.stock_zh_index_daily(symbol="sh000001")
+                if sh_index.empty:
+                    logger.error("Failed to fetch Shanghai index data")
+                    return {'status': 'error', 'message': 'Failed to fetch Shanghai index data'}
+            except Exception as e:
+                logger.error(f"Error fetching Shanghai index: {str(e)}")
+                return {'status': 'error', 'message': f'Error fetching Shanghai index: {str(e)}'}
+            
             sh_index['date'] = pd.to_datetime(sh_index['date'])
             
             # 添加数据验证
@@ -65,14 +81,37 @@ class MarketDataFetcher:
             latest_sh_index = latest_sh_data['close'].iloc[0]
             
             # 获取上证指数估值数据
-            sh_pe = ak.stock_market_pe_lg(symbol="上证")
-            sh_pb = ak.stock_market_pb_lg(symbol="上证")
+            def get_stock_market_pe_pb(px,symbol):
+                if px == 'pe':
+                    try:
+                        data = ak.stock_market_pe_lg(symbol=symbol)
+                        return data
+                    except Exception as e:
+                        logger.error(f"get_stock_market_pe Error: {e}")
+                        logger.info(f"Restart celery service")
+                        # 重启celery服务：sudo systemctl restart celery_worker_fireplan.service
+                        if os.environ.get('SERVER_MODE') == 'release':
+                            os.system('sudo systemctl restart celery_worker_fireplan_release.service')
+                        else:
+                            os.system('sudo systemctl restart celery_worker_fireplan.service')
+                        raise Exception(f"Failed to fetch data,restart celery service")
+                elif px == 'pb':
+                    try:
+                        data = ak.stock_market_pb_lg(symbol=symbol)
+                        return data
+                    except Exception as e:
+                        logger.error(f"get_stock_market_pb Error: {e}")
+                        logger.info(f"Restart celery service")
+                        # 重启celery服务：sudo systemctl restart celery_worker_fireplan.service
+                        if os.environ.get('SERVER_MODE') == 'release':
+                            os.system('sudo systemctl restart celery_worker_fireplan_release.service')
+                        else:
+                            os.system('sudo systemctl restart celery_worker_fireplan.service')
+                        raise Exception(f"Failed to fetch data,restart celery service")
+        
+            sh_pe = get_stock_market_pe_pb('pe','上证')
+            sh_pb = get_stock_market_pe_pb('pb','上证')
             
-            if sh_pe.empty or sh_pb.empty:
-                return {
-                    'status': 'error',
-                    'message': 'Failed to fetch Shanghai index PE/PB data'
-                }
             
             # 计算12年前的日期
             current_date = pd.Timestamp(today)
@@ -129,7 +168,7 @@ class MarketDataFetcher:
             # today = '20241212'
             # url = f'https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/dl_resource/industry_pe/bk{today}.zip'
             url = f'https://oss-ch.csindex.com.cn/dl_resource/industry_pe/bk{today}.zip'
-            
+            logger.info(f"Fetcher: url: {url}")
             # 沪深市场，不包括北交所（京市），近 12 年历史估值区间（2012-01-01 至 2024-11-16）。数据来源：https://legulegu.com/stockdata/a-pe。
             # 暂无沪深历史动态市盈率数据
             # history_pe_min = 11.05
@@ -151,14 +190,19 @@ class MarketDataFetcher:
             history_pb_min = min(market_stats['min_pb'] or float('inf'), 1.25)
             history_pb_max = max(market_stats['max_pb'] or 0, 3.52)
 
-            # 下载zip文件
-            response = requests.get(url)
-
-            if response.status_code != 200:
-                return {
-                    'status': 'error',
-                    'message': 'Failed to download market data from csi.' + url
-                }
+            # 添加更多的错误处理和日志记录
+            try:
+                response = requests.get(url, headers=headers)
+                response.raise_for_status()  # 检查响应状态
+                if not response.content:
+                    raise ValueError("Empty response received")
+                
+                # 记录响应内容用于调试
+                logger.debug(f"Response content: {response.content[:200]}...")  # 只记录前200个字符
+                
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Request failed: {str(e)}")
+                return {'status': 'error', 'message': f'Request failed: {str(e)}'}
             
             if response.status_code == 200:
 
@@ -190,6 +234,7 @@ class MarketDataFetcher:
                     df_static = pd.read_excel(xls_path, sheet_name='板块静态市盈率')
                     market_row = df_static[df_static['板块名称'] == '沪深市场'].iloc[0]
                     pe_ratio = round(float(market_row['最新静态\n市盈率']), 2)
+
                     # 更新历史区间值并计算区间百分位
                     history_pe_min = min(history_pe_min, pe_ratio)
                     history_pe_max = max(history_pe_max, pe_ratio)
@@ -202,7 +247,6 @@ class MarketDataFetcher:
                     pe_rank = len(df_historical[df_historical['pe_ratio'] <= current_pe]) / len(df_historical) * 100
                     pe_rank = round(pe_rank, 2)
 
-
                     # 读取滚动市盈率sheet
                     df_pe_ttm = pd.read_excel(xls_path, sheet_name='板块滚动市盈率')
                     market_row = df_pe_ttm[df_pe_ttm['板块名称'] == '沪深市场'].iloc[0]
@@ -212,6 +256,7 @@ class MarketDataFetcher:
                     df_pb = pd.read_excel(xls_path, sheet_name='板块市净率')
                     market_row = df_pb[df_pb['板块名称'] == '沪深市场'].iloc[0]
                     pb_ratio = round(float(market_row['最新市净率']), 2)
+                    
                     # 更新历史区间值并计算区间百分位
                     history_pb_min = min(history_pb_min, pb_ratio)
                     history_pb_max = max(history_pb_max, pb_ratio)
@@ -287,18 +332,21 @@ class MarketDataFetcher:
                                 'sh_index', 'sh_pe_rank_percentile', 'sh_pb_rank_percentile']:
                         setattr(existing, field, getattr(valuation, field))
                     existing.save()
+                    logger.info(f"Fetcher: Market valuation data existing and updated.")
                     return {
                         'status': 'success',
-                        'message': 'Market valuation data updated,market_temperature: '+str(valuation.market_temperature)
+                        'message': 'Market valuation data existing and updated,market_temperature: '+str(valuation.market_temperature)
                     }
                 else:
                     valuation.save()
+                    logger.info(f"Fetcher: New market valuation data created.")
                     return {
                         'status': 'success',
                         'message': 'New market valuation data created'
                     }
                     
         except Exception as e:
+            logger.error(f"Error in fetch_daily_market_data: {str(e)}")
             return {
                 'status': 'error',
                 'message': f"Error fetching market valuation: {str(e)}"
@@ -487,6 +535,8 @@ class MarketDataFetcher:
             today = date
             # url = f'https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/dl_resource/industry_pe/{today}.zip'
             url = f'https://oss-ch.csindex.com.cn/dl_resource/industry_pe/{today}.zip'
+            logger.info(f"Fetcher: 获取股票数据估值数据（CSI）: {url}")
+
             response = requests.get(url)
             if response.status_code == 200:
                 with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
@@ -594,8 +644,9 @@ class MarketDataFetcher:
 
                             valuation.save()
                     
-                    # 获取集思录数据
+                    # 获取东方财富A股数据
                     stock_zh_a_spot_em = ak.stock_zh_a_spot_em()
+                    logger.info(f"Fetcher: 从东方财富获取A股数据，总数量: {len(stock_zh_a_spot_em)}")
 
                     # 创建股票代码到数据的映射
                     em_data_map = {
@@ -607,6 +658,8 @@ class MarketDataFetcher:
                             'volume': MarketDataFetcher.safe_int(row['成交量']) or 0,
                             'amount': MarketDataFetcher.safe_float(row['成交额']) or 0.0,
                             'turnover': MarketDataFetcher.safe_float(row['换手率']) or 0.0,
+                            # 'pe_ttm_ratio': MarketDataFetcher.safe_float(row['市盈率-动态']),
+                            # 'pb_ratio': MarketDataFetcher.safe_float(row['市净率']),
                             'total_market_value': MarketDataFetcher.safe_float(row['总市值']),
                             'float_market_value': MarketDataFetcher.safe_float(row['流通市值']),
                             'sixty_day_increase': MarketDataFetcher.safe_float(row['60日涨跌幅']),
@@ -975,7 +1028,7 @@ class MarketDataFetcher:
             return {
                 'status': 'success',
                 'message': 'Index data updated successfully'
-        }
+            }
                 
         except Exception as e:
             return {

@@ -1,5 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import Group, Permission
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
     help = '创建默认用户组'
@@ -11,4 +14,4 @@ class Command(BaseCommand):
         for group_name in groups:
             group, created = Group.objects.get_or_create(name=group_name)
             if created:
-                self.stdout.write(f'Created group: {group_name}') 
+                logger.info("Created group: %s", group_name) 

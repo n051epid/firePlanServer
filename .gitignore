@@ -49,7 +49,7 @@ logs/*.log
 *.bak
 *.swp
 *.bak.py
-dist.zip
+dist*.zip
 
 # Celery
 celerybeat-schedule.*

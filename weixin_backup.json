@@ -1,0 +1,223 @@
+[
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 1,
+  "fields": {
+    "name": "数字游民",
+    "type": "click",
+    "key": "digital_nomad",
+    "url": "",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": null,
+    "order": 0,
+    "updated_at": "2024-12-18T04:31:01.604Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 2,
+  "fields": {
+    "name": "生活方式",
+    "type": "click",
+    "key": "coming_soon",
+    "url": "https://planb.qinglv.online/digital-nomad/lifestyle",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 1,
+    "order": 0,
+    "updated_at": "2024-12-30T07:02:59.380Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 3,
+  "fields": {
+    "name": "市场估值",
+    "type": "view",
+    "key": null,
+    "url": "https://mp.weixin.qq.com/s/l8P_UcASG9SiLPJQ5zXTYA",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 10,
+    "order": 0,
+    "updated_at": "2024-12-30T14:37:05.925Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 4,
+  "fields": {
+    "name": "工作机会",
+    "type": "click",
+    "key": "coming_soon",
+    "url": "https://planb.qinglv.online/digital-nomad/jobs",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 1,
+    "order": 1,
+    "updated_at": "2024-12-30T07:03:28.604Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 5,
+  "fields": {
+    "name": "资产配置",
+    "type": "click",
+    "key": "asset_allocation",
+    "url": "",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": null,
+    "order": 1,
+    "updated_at": "2024-12-18T04:31:01.605Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 6,
+  "fields": {
+    "name": "长期投资",
+    "type": "click",
+    "key": "coming_soon",
+    "url": "https://youzhiyouxing.com/asset/stable?session_id=${session_id}",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 5,
+    "order": 0,
+    "updated_at": "2024-12-30T07:04:53.766Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 7,
+  "fields": {
+    "name": "大数策略",
+    "type": "view",
+    "key": null,
+    "url": "https://mp.weixin.qq.com/s/DqTdSQLLIUQnhGDCr78c7w",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 10,
+    "order": 1,
+    "updated_at": "2024-12-31T09:46:46.759Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 8,
+  "fields": {
+    "name": "交流讨论",
+    "type": "click",
+    "key": "coming_soon",
+    "url": "https://planb.qinglv.online/digital-nomad/community",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 1,
+    "order": 2,
+    "updated_at": "2024-12-30T07:03:41.159Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 9,
+  "fields": {
+    "name": "保险保障",
+    "type": "click",
+    "key": "coming_soon",
+    "url": "https://planb.qinglv.online/asset/insurance",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 5,
+    "order": 2,
+    "updated_at": "2024-12-30T07:05:15.037Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 10,
+  "fields": {
+    "name": "FIRE-PlanB",
+    "type": "click",
+    "key": "fire_plan",
+    "url": null,
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": null,
+    "order": 2,
+    "updated_at": "2024-12-18T06:32:41.909Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 11,
+  "fields": {
+    "name": "转债策略",
+    "type": "view",
+    "key": "coming_soon",
+    "url": "https://mp.weixin.qq.com/s/xxWPjQl_4d1GWR7i2Be4Mg",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 10,
+    "order": 2,
+    "updated_at": "2025-01-03T09:07:10.077Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 13,
+  "fields": {
+    "name": "稳健理财",
+    "type": "click",
+    "key": "coming_soon",
+    "url": "https://planb.qinglv.online/asset/stable",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 5,
+    "order": 1,
+    "updated_at": "2024-12-30T07:05:03.873Z"
+  }
+},
+{
+  "model": "weixin_offiaccount.wechatmenu",
+  "pk": 14,
+  "fields": {
+    "name": "养老计划",
+    "type": "view",
+    "key": null,
+    "url": "https://mp.weixin.qq.com/mp/appmsgalbum?__biz=Mzk1NzM0OTAzMw==&action=getalbum&album_id=3785110310868828163#wechat_redirect",
+    "media_id": null,
+    "appid": null,
+    "pagepath": null,
+    "article_id": null,
+    "parent": 5,
+    "order": 3,
+    "updated_at": "2024-12-26T09:05:31.259Z"
+  }
+}
+]

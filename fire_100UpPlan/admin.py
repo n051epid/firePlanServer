@@ -24,7 +24,9 @@ from .models import (
 )
 from django.utils.translation import gettext_lazy as _
 from django.contrib import messages
+import logging
 
+logger = logging.getLogger(__name__)
 
 # 会员系统分组
 class MembershipAdmin(admin.ModelAdmin):
@@ -170,8 +172,25 @@ admin.site.unregister(Group)
 admin.site.register(Group, CustomGroupAdmin)
 
 class CustomUserAdmin(UserAdmin):
-    # 保留原有的列
-    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'get_groups')
+    # 保留原有的列并添加格式化的 date_joined
+    list_display = ('username', 'email', 'first_name', 'last_name', 'is_staff', 'formatted_date_joined', 'formatted_last_login', 'get_groups')
+    
+    # 添加日期筛选
+    list_filter = ('is_staff', 'is_superuser', 'is_active', 'groups', 'date_joined')
+    
+    def formatted_date_joined(self, obj):
+        if obj.date_joined:
+            return obj.date_joined.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%d %H:%M:%S')
+        return '-'
+    formatted_date_joined.short_description = 'Date joined'
+    formatted_date_joined.admin_order_field = 'date_joined'  # 允许排序
+
+    def formatted_last_login(self, obj):
+        if obj.last_login:
+            return obj.last_login.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%d %H:%M:%S')
+        return '-'
+    formatted_last_login.short_description = 'Last login'
+    formatted_last_login.admin_order_field = 'last_login'  # 允许排序
     
     def get_groups(self, obj):
         # 获取用户组并以逗号分隔显示
