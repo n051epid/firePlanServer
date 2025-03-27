@@ -1,0 +1,37 @@
+{% extends 'admin/change_list.html' %}
+
+{% block object-tools %}
+    <style>
+        .update-button {
+            background: #79aec8;
+            padding: 10px 15px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            float: right;
+            margin-left: 5px;
+        }
+        
+        .update-button:hover {
+            background: #417690;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .object-tools {
+            text-align: right;
+        }
+    </style>
+
+    <ul class="object-tools">
+        <li>
+            <form action="update-now/" method="POST" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="update-button">
+                    立即更新数据
+                </button>
+            </form>
+        </li>
+    </ul>
+{% endblock %} 

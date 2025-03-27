@@ -828,23 +828,37 @@ class MarketDataFetcher:
         7. 近一年涨幅 < 100%
         """
         try:
+            # 先检查空值情况（CSI 获取的数据中静态市盈率、滚动市盈率、市净率可能为空）
+            null_stats = {
+                'pe_ttm_ratio': StockData.objects.filter(pe_ttm_ratio__isnull=True).count(),
+                'pb_ratio': StockData.objects.filter(pb_ratio__isnull=True).count(),
+                'total_market_value': StockData.objects.filter(total_market_value__isnull=True).count(),
+                'close': StockData.objects.filter(close__isnull=True).count(),
+                'sixty_day_increase': StockData.objects.filter(sixty_day_increase__isnull=True).count(),
+            }
+            logger.info(f"Fetcher: 股票数据空值统计: {null_stats}")
+
             # 批量筛选符合条件的股票(数据库只有最近一个交易日的数据)
             stocks = StockData.objects.filter(
                 pe_ttm_ratio__lt=20,
                 pb_ratio__lt=2,
                 total_market_value__gt=300000000,
                 close__gt=2,
-                sixty_day_increase__lt=50
+                sixty_day_increase__lt=50,
+                year_to_date_increase__lt=100
             ).exclude(
                 name__iregex=r'.*st.*'
             )
+            logger.info(f"Fetcher: 符合大数投资策略的股票数量: {len(stocks)}")
+
             # 使用企业所属行业的估值中位数作为筛选条件，以便适应个行业的不同特性
             stocks_industry_valuation = StockData.objects.filter(
                 pe_ttm_ratio__lt=F('parent_industry_pe_ttm_ratio_median'),
                 pb_ratio__lt=F('parent_industry_pb_ratio_median'),
                 total_market_value__gt=300000000,
                 close__gt=2,
-                sixty_day_increase__lt=50
+                sixty_day_increase__lt=50,
+                year_to_date_increase__lt=100
             ).exclude(
                 name__iregex=r'.*st.*'
             )

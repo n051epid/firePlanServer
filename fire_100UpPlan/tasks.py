@@ -236,6 +236,7 @@ def fetch_bigdata_strategy_data(self):
 def fetch_convertible_bond_data(self):
     """可转债数据采集任务"""
     logger.info(f"Task: Fetching convertible bond data")
+    
     try:
         fetcher = ConvertibleBondMarketDataFetcher()
         # result = fetcher.fetch_convertible_bond_market_data()

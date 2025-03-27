@@ -1,9 +1,12 @@
 from django.contrib import admin
 from django.contrib import messages
-from .models import WeChatMenu
+from .models import WeChatMenu, WeixinArticle
 from .utils import wechat_token_qinglv, wechat_token_black13eard
 import requests
 import json
+from django.http import HttpResponseRedirect
+from django.urls import path
+from .tasks import generate_daily_article
 
 
 @admin.register(WeChatMenu)
@@ -78,4 +81,37 @@ class WeChatMenuAdmin(admin.ModelAdmin):
             )
     
     sync_to_wechat.short_description = "同步菜单到微信"
+
+
+@admin.register(WeixinArticle)
+class WeixinArticleAdmin(admin.ModelAdmin):
+    change_list_template = "admin/weixin_offiaccount/weixin_article_changelist.html"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('generate-article/', self.generate_article_view, name='generate-article'),
+        ]
+        return custom_urls + urls
+
+    def generate_article_view(self, request):
+        """处理生成文章的请求"""
+        if request.method == "POST":
+            try:
+                # 调用 Celery 任务
+                task = generate_daily_article.delay()
+                self.message_user(request, "文章生成任务已提交，请稍后查看结果。", messages.SUCCESS)
+            except Exception as e:
+                self.message_user(request, f"提交任务失败: {str(e)}", messages.ERROR)
+        
+        return HttpResponseRedirect("../")
 

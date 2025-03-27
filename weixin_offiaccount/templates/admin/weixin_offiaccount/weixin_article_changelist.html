@@ -1,0 +1,11 @@
+{% extends 'admin/change_list.html' %}
+
+{% block object-tools %}
+    <div>
+        <form action="generate-article/" method="POST">
+            {% csrf_token %}
+            <button type="submit" class="button" style="margin: 10px;">推送市场估值文章</button>
+        </form>
+    </div>
+    {{ block.super }}
+{% endblock %} 

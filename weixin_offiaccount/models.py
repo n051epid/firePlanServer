@@ -35,9 +35,20 @@ class WeChatMenu(models.Model):
 
     class Meta:
         verbose_name = '微信菜单'
-        verbose_name_plural = '微信菜单'
+        verbose_name_plural = '1-微信菜单'
         ordering = ['order']
 
     def __str__(self):
         return self.name
     
+class WeixinArticle(models.Model):
+    """用于在 Admin 中显示微信文章管理功能的模型"""
+    title = models.CharField('标题', max_length=200)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    
+    class Meta:
+        verbose_name = '微信文章'
+        verbose_name_plural = '2-微信文章'
+    
+    def __str__(self):
+        return self.title

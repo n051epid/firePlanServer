@@ -1,6 +1,6 @@
 acme==2.11.0
 akracer==0.0.13
-akshare==1.16.10
+akshare==1.16.43
 amqp==5.2.0
 annotated-types==0.7.0
 anyio==4.6.2.post1

@@ -346,7 +346,7 @@ class BondData(BaseMarketData):
             models.Index(fields=['code']),  # 为 code 字段创建索引
             models.Index(fields=['date']),  # 为 date 字段创建索引
         ]
-        verbose_name = '可转债数据'
+        verbose_name = '可转债池'
         verbose_name_plural = verbose_name
 
     def __str__(self):

@@ -595,6 +595,7 @@ class ConvertibleBondMarketDataView(APIView):
                 models.Q(is_callable__in=['已公告强赎', '公告要强赎']) |
                 models.Q(remaining_size__gt=5.0) |  # 规模大于 5 亿的过滤掉
                 models.Q(listing_date__gte=datetime.now().date()) |  # 上市时间晚于当前日期
+                models.Q(listing_date__isnull=True) |  #上市时间为空（待上市）
                 models.Q(maturity_date__isnull=True) |  # 到期日为空
                 models.Q(stock_price__lt=2) |  # 正股价小于2元
                 # models.Q(stock_pb__lt=1) |  # 正股 pb 小于 1 （新增，待查看效果）
@@ -602,6 +603,7 @@ class ConvertibleBondMarketDataView(APIView):
                 ~models.Q(bond_rating__startswith='A') |  # 评级是A及以下
                 models.Q(bond_rating__isnull=True) |  # 评级为空
                 models.Q(is_risk_excluded=True) |  # 手动标记风险
+                models.Q(name__icontains='退') | # 名字中包含“退”
                 # models.Q(double_low__gt=300) | # 双低值高于 300
                 # models.Q(stock_pe_ttm_ratio__isnull=True) |  # 正股 TTM PE 为空
                 # models.Q(stock_industry_pb_ratio_median__lt=models.F('stock_pb')) |  # 正股 PB 小于行业中位数PB
@@ -640,7 +642,8 @@ class ConvertibleBondMarketDataView(APIView):
                 models.Q(maturity_date__isnull=True) | # 到期日为空
                 models.Q(bond_rating__isnull=True) |  # 评级为空
                 models.Q(stock_price__lt=2) | # 正股价小于2元
-                models.Q(is_risk_excluded=True) # 手动标记风险
+                models.Q(is_risk_excluded=True) | # 手动标记风险
+                models.Q(name__icontains='退') # 名字中包含“退”
                 # models.Q(stock_pb__lt=1)  # 正股 pb 小于 1 （新增，待查看效果）
             ).values(
                 'code', 

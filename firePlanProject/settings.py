@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from celery.schedules import crontab
+from datetime import datetime
 
 # 时区设置
 USE_TZ = True
@@ -295,8 +296,6 @@ MINIMAX_API_KEY = os.environ.get('MINIMAX_API_KEY')
 # Kimi API 设置
 KIMI_API_KEY = os.environ.get('KIMI_API_KEY')
 
-# 日志配置
-LOG_FILE_PATH = os.environ.get('LOG_FILE_PATH', os.path.join(BASE_DIR, 'logs', 'django_debug.log'))
 
 # Email settings
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -310,7 +309,7 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.environ.get('EMAIL_HOST_USER')
 BCC_EMAIL = os.environ.get('BCC_EMAIL')
 
-# 集思录 API 设置
+# 集思录 API 设置(未使用)
 JISILU_API_COOKIE = os.environ.get('JISILU_API_COOKIE')
 
 
@@ -319,7 +318,7 @@ WECHAT_APP_ID_QINGLV = os.environ.get('WECHAT_APP_ID_QINGLV')
 WECHAT_APP_SECRET_QINGLV = os.environ.get('WECHAT_APP_SECRET_QINGLV')
 WECHAT_TOKEN_QINGLV = os.environ.get('WECHAT_TOKEN_QINGLV')
 WECHAT_QRCODE_URL_QINGLV = os.environ.get('WECHAT_QRCODE_URL_QINGLV')
-WECHAT_AUTO_SYNC_DRAFT = True  # 是否自动同步到草稿箱
+WECHAT_AUTO_SYNC_DRAFT = True  # 是否自动同步到草稿箱，未使用？
 WECHAT_AUTHOR_NAME_QINGLV = os.environ.get('WECHAT_AUTHOR_NAME_QINGLV')  # 作者名称
 WECHAT_DEFAULT_THUMB_MEDIA_ID_QINGLV = os.environ.get('WECHAT_DEFAULT_THUMB_MEDIA_ID_QINGLV')  # 默认封面图的media_id
 
@@ -328,7 +327,7 @@ WECHAT_APP_ID_BLACK13EARD = os.environ.get('WECHAT_APP_ID_BLACK13EARD')
 WECHAT_APP_SECRET_BLACK13EARD = os.environ.get('WECHAT_APP_SECRET_BLACK13EARD')
 WECHAT_TOKEN_BLACK13EARD = os.environ.get('WECHAT_TOKEN_BLACK13EARD')
 WECHAT_QRCODE_URL_BLACK13EARD = os.environ.get('WECHAT_QRCODE_URL_BLACK13EARD')
-WECHAT_AUTO_SYNC_DRAFT = True  # 是否自动同步到草稿箱
+WECHAT_AUTO_SYNC_DRAFT = True  # 是否自动同步到草稿箱，未使用？
 WECHAT_AUTHOR_NAME_BLACK13EARD = os.environ.get('WECHAT_AUTHOR_NAME_BLACK13EARD')  # 作者名称
 WECHAT_DEFAULT_THUMB_MEDIA_ID_BLACK13EARD = os.environ.get('WECHAT_DEFAULT_THUMB_MEDIA_ID_BLACK13EARD')  # 默认封面图的media_id
 
@@ -392,7 +391,7 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
         'schedule': crontab(hour=23, minute=00),  # 备份计划，每天23:00执行
     },
-    'fetch_convertible_bond_data2': {
+    'fetch_convertible_bond_data': {
         'task': 'fire_100UpPlan.tasks.fetch_convertible_bond_data',
         'schedule': crontab(hour=7, minute=00),  # 公告信息更新，每天7:00执行
     }
@@ -416,6 +415,10 @@ SOCIALACCOUNT_PROVIDERS = {
         }
     }
 }
+
+# 日志配置：生成带日期后缀的日志文件
+log_filename = f"django_debug_{datetime.now().strftime('%Y%m%d')}.log"
+LOG_FILE_PATH = os.environ.get('LOG_FILE_PATH', os.path.join(BASE_DIR, 'logs', log_filename))
 
 LOGGING = {
     'version': 1,

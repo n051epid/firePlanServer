@@ -25,6 +25,16 @@ from .models import (
 from django.utils.translation import gettext_lazy as _
 from django.contrib import messages
 import logging
+from .tasks import (
+    fetch_index_data,
+    fetch_margin_trading_data,
+    fetch_industry_valuation_data,
+    fetch_convertible_bond_data,
+    fetch_bond_index_data,
+    fetch_bigdata_strategy_data,
+    fetch_daily_market_data,
+)
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -205,105 +215,62 @@ admin.site.register(User, CustomUserAdmin)
 
 
 
+# 以下为市场数据管理功能
 
-# 市场数据分组
-class MarketDataAdmin(admin.ModelAdmin):
-    """市场数据管理基类"""
+# 创建一个 Mixin 类来添加 Admin 管理页面的更新功能
+class UpdateDataMixin:
+    change_list_template = "admin/fire_100upplan/base_change_list.html"
+    tasks = None  # 改为 tasks 列表，支持多个任务
     
-    def get_app_list(self, request):
-        """
-        自定义应用分组显示
-        """
-        app_dict = self._build_app_dict(request)
-        app_dict['name'] = _('市场数据')  # 支持国际化
-        app_dict['app_label'] = 'market_data'  # 设置应用标签
-        return [app_dict]
+    def has_add_permission(self, request):
+        # 禁止手动添加数据
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        # 禁止删除数据
+        return False
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('update-now/', self.update_now_view, name='update-data'),
+        ]
+        return custom_urls + urls
+    
+    def update_now_view(self, request):
+        try:
+            if self.tasks:
+                # 确保 tasks 始终是列表
+                task_list = self.tasks if isinstance(self.tasks, (list, tuple)) else [self.tasks]
+                for task in task_list:
+                    task.delay()
+                    time.sleep(15) # 每个任务之间间隔15秒，注意：time.sleep() 会阻塞视图处理，在生产环境中可能需要考虑使用异步方式或者将任务序列的控制放在 Celery 任务中处理。
 
-@admin.register(MarketValuation)
-class MarketValuationAdmin(MarketDataAdmin):
-    list_display = ('date', 'sector_name', 'market_temperature', 'pe_ratio', 'pe_range_percentile', 'pe_rank_percentile', 'pe_ttm_ratio', 'pb_ratio', 'pb_range_percentile', 'pb_rank_percentile', 'dividend_ratio', 'stock_count', 'total_volume', 'total_amount', 'sh_index', 'sh_pe_rank_percentile', 'sh_pb_rank_percentile')
-    date_hierarchy = 'date'
-    ordering = ('-date',)
-    app_label = 'market_data'
+            self.message_user(request, "数据更新任务已提交，请稍后刷新页面查看结果。", messages.SUCCESS)
+        except Exception as e:
+            self.message_user(request, f"提交任务失败: {str(e)}", messages.ERROR)
+        return HttpResponseRedirect("../")
 
+# 修改现有的 Admin 类，使用 Mixin
 @admin.register(IndexData)
-class IndexDataAdmin(MarketDataAdmin):
+class IndexDataAdmin(UpdateDataMixin, admin.ModelAdmin):
+    tasks = [fetch_index_data]
     list_display = ('date', 'code', 'name', 'close', 'pe_ratio', 'pe_ttm_ratio', 'pb_ratio', 'percentile')
     list_filter = ('date','name')
     search_fields = ('code', 'name')
     date_hierarchy = 'date'
     app_label = 'market_data'
 
-
 @admin.register(MarginTradingData)
-class MarginTradingDataAdmin(MarketDataAdmin):
+class MarginTradingDataAdmin(UpdateDataMixin, admin.ModelAdmin):
+    tasks = [fetch_margin_trading_data]
     list_display = ('date', 'margin_balance', 'securities_balance', 'margin_buy', 'securities_sell', 'securities_firms', 'branches', 'individual_investors', 'institutional_investors', 'active_traders', 'margin_traders', 'collateral_value', 'maintenance_ratio')
     date_hierarchy = 'date'
     app_label = 'market_data'
 
-@admin.register(StockData)
-class StockDataAdmin(MarketDataAdmin):
-    list_display = (
-        'code', 
-        'name', 
-        'close', 
-        'pe_ratio', 
-        'pe_ttm_ratio', 
-        'pb_ratio', 
-        'industry_name',
-        'industry_code',
-        'parent_industry_code',
-        'parent_industry_pb_ratio_median',
-        'parent_industry_pe_ttm_ratio_median',
-        'total_market_value',
-        'float_market_value',
-        'sixty_day_increase',
-        'year_to_date_increase',
-    )
-    list_filter = ('industry_name', 'industry_code', 'parent_industry_code')
-    search_fields = ('code', 'name')
-    date_hierarchy = 'date'
-    app_label = 'market_data'
-
-
-@admin.register(BigDataStrategyStockData)
-class BigDataStrategyStockDataAdmin(MarketDataAdmin):
-    list_display = ('code', 'name', 'bigdata_score', 'close', 'one_year_min', 'pe_ratio', 'pe_ttm_ratio', 'pb_ratio', 'dividend_ratio','industry_name', 'industry_code', 'parent_industry_code', 'total_market_value', 'sixty_day_increase', 'year_to_date_increase', 'one_year_increase', 'bigdata_score_method')
-    list_filter = ('date', 'industry_name', 'industry_code', 'parent_industry_code', 'bigdata_score_method')
-    search_fields = ('code', 'name')
-    date_hierarchy = 'date'
-    ordering = ('-bigdata_score',)
-    app_label = 'market_data'
-
-
-@admin.register(FundData)
-class FundDataAdmin(MarketDataAdmin):
-    list_display = ('date', 'code', 'name', 'nav', 'acc_nav', 'daily_return', 'type')
-    list_filter = ('date', 'type')
-    search_fields = ('code', 'name')
-    date_hierarchy = 'date'
-    app_label = 'market_data'
-
-
-@admin.register(BondIndexData)
-class BondIndexDataAdmin(MarketDataAdmin):
-    list_display = ('date', 'code', 'name', 'price', 'increase_rt', 'avg_price', 'mid_price', 'avg_premium_rt', 'mid_premium_rt', 'avg_ytm_rt', 'price_90', 'price_90_100', 'price_100_110', 'price_110_120', 'price_120_130', 'price_130')
-    search_fields = ('code', 'name')
-    date_hierarchy = 'date'
-    app_label = 'market_data'
-
-@admin.register(BondData)
-class BondDataAdmin(MarketDataAdmin):
-    list_display = ('code', 'name', 'close', 'double_low', 'redemption_countdown', 'is_callable', 'redemption_trigger_price', 'redemption_price', 'convertible_start_date', 'last_trading_date', 'stock_code', 'stock_name', 'stock_price', 'stock_pb', 'stock_industry_pb_ratio_median', 'stock_pe_ttm_ratio', 'stock_industry_pe_ttm_ratio_median', 'convertible_price', 'convertible_value', 'premium_rate', 'bond_rating', 'remaining_size', 'ytm_before_tax', 'maturity_date', 'listing_date', 'is_risk_excluded')
-    list_filter = ('is_callable', 'bond_rating', 'is_risk_excluded')
-    search_fields = ('code', 'name')
-    date_hierarchy = 'date'
-    ordering = ('premium_rate','remaining_size','double_low')
-    app_label = 'market_data'
-
-
 @admin.register(IndustryValuation)
-class IndustryValuationAdmin(admin.ModelAdmin):
+class IndustryValuationAdmin(UpdateDataMixin, admin.ModelAdmin):
+    tasks = [fetch_industry_valuation_data]
     list_display = [
         'date',
         'industry_code',
@@ -379,11 +346,71 @@ class IndustryValuationAdmin(admin.ModelAdmin):
             'classes': ('collapse',)  # 默认折叠
         }),
     ]
-    
-    def has_add_permission(self, request):
-        # 禁止手动添加数据
-        return False
-    
-    def has_delete_permission(self, request, obj=None):
-        # 禁止删除数据
-        return False
+
+@admin.register(BondData)
+class BondDataAdmin(UpdateDataMixin, admin.ModelAdmin):
+    tasks = [fetch_convertible_bond_data]  # 使用列表形式，即使只有一个任务
+    list_display = ('code', 'name', 'close', 'double_low', 'redemption_countdown', 'is_callable', 'redemption_trigger_price', 'redemption_price', 'convertible_start_date', 'last_trading_date', 'stock_code', 'stock_name', 'stock_price', 'stock_pb', 'stock_industry_pb_ratio_median', 'stock_pe_ttm_ratio', 'stock_industry_pe_ttm_ratio_median', 'convertible_price', 'convertible_value', 'premium_rate', 'bond_rating', 'remaining_size', 'ytm_before_tax', 'maturity_date', 'listing_date', 'is_risk_excluded')
+    list_filter = ('is_callable', 'bond_rating', 'is_risk_excluded')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    ordering = ('premium_rate','remaining_size','double_low')
+    app_label = 'market_data'
+
+@admin.register(BondIndexData)
+class BondIndexDataAdmin(UpdateDataMixin, admin.ModelAdmin):
+    tasks = [fetch_bond_index_data]
+    list_display = ('date', 'code', 'name', 'price', 'increase_rt', 'avg_price', 'mid_price', 'avg_premium_rt', 'mid_premium_rt', 'avg_ytm_rt', 'price_90', 'price_90_100', 'price_100_110', 'price_110_120', 'price_120_130', 'price_130')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+@admin.register(BigDataStrategyStockData)
+class BigDataStrategyStockDataAdmin(UpdateDataMixin, admin.ModelAdmin):
+    tasks = [fetch_index_data, fetch_industry_valuation_data, fetch_bigdata_strategy_data]
+    list_display = ('code', 'name', 'bigdata_score', 'close', 'one_year_min', 'pe_ratio', 'pe_ttm_ratio', 'pb_ratio', 'dividend_ratio','industry_name', 'industry_code', 'parent_industry_code', 'total_market_value', 'sixty_day_increase', 'year_to_date_increase', 'one_year_increase', 'bigdata_score_method')
+    list_filter = ('date', 'industry_name', 'industry_code', 'parent_industry_code', 'bigdata_score_method')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    ordering = ('-bigdata_score',)
+    app_label = 'market_data'
+
+@admin.register(FundData)
+class FundDataAdmin(admin.ModelAdmin):
+    list_display = ('date', 'code', 'name', 'nav', 'acc_nav', 'daily_return', 'type')
+    list_filter = ('date', 'type')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+@admin.register(StockData)
+class StockDataAdmin(admin.ModelAdmin):
+    list_display = (
+        'code', 
+        'name', 
+        'close', 
+        'pe_ratio', 
+        'pe_ttm_ratio', 
+        'pb_ratio', 
+        'industry_name',
+        'industry_code',
+        'parent_industry_code',
+        'parent_industry_pb_ratio_median',
+        'parent_industry_pe_ttm_ratio_median',
+        'total_market_value',
+        'float_market_value',
+        'sixty_day_increase',
+        'year_to_date_increase',
+    )
+    list_filter = ('industry_name', 'industry_code', 'parent_industry_code')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    app_label = 'market_data'
+
+@admin.register(MarketValuation)
+class MarketValuationAdmin(UpdateDataMixin, admin.ModelAdmin):
+    tasks = [fetch_index_data, fetch_daily_market_data]  # 按顺序执行的任务列表
+    list_display = ('date', 'sector_name', 'market_temperature', 'pe_ratio', 'pe_range_percentile', 'pe_rank_percentile', 'pe_ttm_ratio', 'pb_ratio', 'pb_range_percentile', 'pb_rank_percentile', 'dividend_ratio', 'stock_count', 'total_volume', 'total_amount', 'sh_index', 'sh_pe_rank_percentile', 'sh_pb_rank_percentile')
+    date_hierarchy = 'date'
+    ordering = ('-date',)
+    app_label = 'market_data'
