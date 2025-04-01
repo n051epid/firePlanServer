@@ -138,7 +138,7 @@ class MarketValuationView(APIView):
                     previous = data_list[1]
                     
                     # 比较大小，计算趋势
-                    trend, sentiment = MarketValuationView._compare_market_temperatures(
+                    trend, sentiment = MarketValuationView._compare_market_trend(
                         latest['percentile'], 
                         previous['percentile']
                     )
@@ -202,17 +202,13 @@ class MarketValuationView(APIView):
                 'securities_balance',
             ).latest('date')
             
-            # 获取最新两条市场温度数据
-            market_temperatures = MarketValuation.objects.values(
-                'date', 
+            # 获取 2024 年 12 月 2 日至今的市场温度数据
+            temperature_history = MarketValuation.objects.filter(
+                date__gte='2024-12-02'
+            ).values(
+                'date',
                 'market_temperature'
-            ).order_by('-date')[:2]
-            
-            latest_market_temperature = market_temperatures[0]['market_temperature'] if market_temperatures else None
-            previous_market_temperature = market_temperatures[1]['market_temperature'] if len(market_temperatures) > 1 else None
-            
-            # 比较两个温度，判断市场情绪
-            trend, sentiment = self._compare_market_temperatures(latest_market_temperature, previous_market_temperature)
+            ).order_by('date')
 
             return {
                 "margin_trading": {
@@ -221,21 +217,16 @@ class MarketValuationView(APIView):
                     "margin_total": float(latest_margin["margin_balance"]) + float(latest_margin["securities_balance"]),
                     "date": latest_margin["date"].strftime("%Y-%m-%d")
                 },
-                "market_temperature": {
-                    "temperature": float(latest_market_temperature),
-                    "temperature_trend": trend,
-                    "market_sentiment": sentiment,
-                    "date": market_temperatures[0]['date'].strftime("%Y-%m-%d")
-                }
+                "temperature_trend": temperature_history
             }
             
         except Exception as e:
             return {}
 
     @staticmethod
-    def _compare_market_temperatures(latest_temperature, previous_temperature):
-        """根据市场温度判断估值水平"""
-        # 判断温度上升还是下降
+    def _compare_market_trend(latest_temperature, previous_temperature):
+        """判断趋势及估值水平"""
+        # 判断趋势上升还是下降
         # logger.info(f"latest_temperature: {latest_temperature}, previous_temperature: {previous_temperature}")
         diff = round(latest_temperature, 0) - round(previous_temperature, 0)
 
@@ -547,8 +538,8 @@ class ConvertibleBondMarketDataView(APIView):
                 code='CB_INDEX'
             ).order_by('-date')[:2]
             
-            # 比较大小，计算趋势 _compare_market_temperatures
-            trend, sentiment = MarketValuationView._compare_market_temperatures(cb_index_data_trend[0].price, cb_index_data_trend[1].price)
+            # 比较大小，计算趋势 _compare_market_trend
+            trend, sentiment = MarketValuationView._compare_market_trend(cb_index_data_trend[0].price, cb_index_data_trend[1].price)
 
 
             # 先将 QuerySet 转换为列表
