@@ -2,7 +2,7 @@ from datetime import datetime,timedelta
 import akshare as ak
 import pandas as pd
 from django.db import transaction
-from ..models import MarketValuation, IndexData, MarginTradingData, IndustryValuation, StockData, BondData, BondIndexData,BigDataStrategyStockData
+from ..models import MarketValuation, IndexData, MarginTradingData, IndustryValuation, StockData, BondData, BondIndexData,BigDataStrategyStockData, StockHistoryData
 import requests
 import zipfile
 import io
@@ -891,20 +891,92 @@ class MarketDataFetcher:
                     
                     # 获取历史数据
                     try:
-                        hist_df = ak.stock_zh_a_hist(
-                            symbol=stock.code,
-                            period="monthly",
-                            start_date=start_date.strftime(date_format),
-                            end_date=end_date.strftime(date_format),
-                            adjust="qfq"
-                        )
+                        # 先检查本地是否有该股票的历史数据
                         
-                        if not hist_df.empty:
-                            # 计算近一年最低点涨幅
-                            one_year_min = hist_df['最低'].min()
-                            one_year_increase = (stock.close - one_year_min) / one_year_min * 100
+                        # 检查是否有该股票的历史数据
+                        existing_data = StockHistoryData.objects.filter(
+                            code=stock.code,
+                            period="monthly",
+                            adjust="qfq"
+                        ).order_by('-date')
+                        
+                        if existing_data.exists():
+                            # 有本地数据，检查是否有最新一个月的数据
+                            latest_date = existing_data.first().date
+                            current_date = datetime.datetime.now().date()
+                            
+                            # 检查是否需要更新数据（如果最新数据不是当前月份）
+                            if latest_date.month != current_date.month or latest_date.year != current_date.year:
+                                # 需要更新数据，获取最新数据
+                                hist_df = ak.stock_zh_a_hist(
+                                    symbol=str(stock.code),
+                                    period="monthly",
+                                    start_date=start_date.strftime(date_format),
+                                    end_date=end_date.strftime(date_format),
+                                    adjust="qfq"
+                                )
+                                
+                                if not hist_df.empty:
+                                    # 保存新数据到本地
+                                    for _, row in hist_df.iterrows():
+                                        StockHistoryData.objects.update_or_create(
+                                            date=row['日期'].date(),
+                                            code=stock.code,
+                                            period="monthly",
+                                            adjust="qfq",
+                                            defaults={
+                                                'name': stock.name,
+                                                'close': row['收盘']
+                                            }
+                                        )
+                                    
+                                    # 重新获取本地数据用于计算
+                                    local_data = StockHistoryData.objects.filter(
+                                        code=stock.code,
+                                        period="monthly",
+                                        adjust="qfq"
+                                    ).order_by('date')
+                                    
+                                    # 计算近一年最低点涨幅
+                                    one_year_min = local_data.aggregate(min_close=models.Min('close'))['min_close']
+                                    one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
+                                else:
+                                    # 使用本地数据计算
+                                    local_data = existing_data.order_by('date')
+                                    one_year_min = local_data.aggregate(min_close=models.Min('close'))['min_close']
+                                    one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
+                            else:
+                                # 使用本地数据计算
+                                local_data = existing_data.order_by('date')
+                                one_year_min = local_data.aggregate(min_close=models.Min('close'))['min_close']
+                                one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
                         else:
-                            one_year_min = one_year_increase = None
+                            # 没有本地数据，从网络获取并保存
+                            hist_df = ak.stock_zh_a_hist(
+                                symbol=str(stock.code),
+                                period="monthly",
+                                start_date=start_date.strftime(date_format),
+                                end_date=end_date.strftime(date_format),
+                                adjust="qfq"
+                            )
+                            
+                            if not hist_df.empty:
+                                # 保存数据到本地
+                                for _, row in hist_df.iterrows():
+                                    StockHistoryData.objects.create(
+                                        date=row['日期'].date(),
+                                        code=stock.code,
+                                        name=stock.name,
+                                        period="monthly",
+                                        adjust="qfq",
+                                        close=row['收盘']
+                                    )
+                                
+                                # 计算近一年最低点涨幅
+                                one_year_min = hist_df['收盘'].min()
+                                one_year_increase = (stock.close - one_year_min) / one_year_min * 100
+                            else:
+                                one_year_min = one_year_increase = None
                     except Exception as e:
                         # 如果获取历史数据失败，使用默认值
                         logger.warning(f"获取股票 {stock.code} 历史数据失败，使用默认值: {str(e)}")
