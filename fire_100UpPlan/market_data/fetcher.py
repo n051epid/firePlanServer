@@ -883,23 +883,32 @@ class MarketDataFetcher:
             # 准备批量更新的数据
             bulk_data = []
             
-            for stock in stocks:
+            for i, stock in enumerate(stocks):
                 try:
-                    # 获取历史数据
-                    hist_df = ak.stock_zh_a_hist(
-                        symbol=stock.code,
-                        period="monthly",
-                        start_date=start_date.strftime(date_format),
-                        end_date=end_date.strftime(date_format),
-                        adjust="qfq"
-                    )
+                    # 添加请求间隔，避免过于频繁的网络请求
+                    if i > 0 and i % 10 == 0:  # 每处理10只股票暂停1秒
+                        time.sleep(1)
                     
-                    if not hist_df.empty:
-                        # 计算近一年最低点涨幅
-                        one_year_min = hist_df['最低'].min()
-                        one_year_increase = (stock.close - one_year_min) / one_year_min * 100
-                    else:
-                        one_year_min = one_year_increase = None,
+                    # 获取历史数据
+                    try:
+                        hist_df = ak.stock_zh_a_hist(
+                            symbol=stock.code,
+                            period="monthly",
+                            start_date=start_date.strftime(date_format),
+                            end_date=end_date.strftime(date_format),
+                            adjust="qfq"
+                        )
+                        
+                        if not hist_df.empty:
+                            # 计算近一年最低点涨幅
+                            one_year_min = hist_df['最低'].min()
+                            one_year_increase = (stock.close - one_year_min) / one_year_min * 100
+                        else:
+                            one_year_min = one_year_increase = None
+                    except Exception as e:
+                        # 如果获取历史数据失败，使用默认值
+                        logger.warning(f"获取股票 {stock.code} 历史数据失败，使用默认值: {str(e)}")
+                        one_year_min = one_year_increase = None
                     
                     # 大数评分：获取具体行业历史估值数据
                     stats = industry_stats.get(stock.parent_industry_code, {})

@@ -202,6 +202,36 @@ class MarketValuationView(APIView):
                 'securities_balance',
             ).latest('date')
             
+            # 获取最新的市场估值数据，包含市场温度
+            latest_valuation = MarketValuation.objects.latest('date')
+            
+            # 获取前一个交易日的市场估值数据，用于计算趋势
+            previous_valuation = MarketValuation.objects.filter(
+                date__lt=latest_valuation.date
+            ).order_by('-date').first()
+            
+            # 计算温度趋势
+            if previous_valuation and previous_valuation.market_temperature is not None and latest_valuation.market_temperature is not None:
+                temperature_diff = latest_valuation.market_temperature - previous_valuation.market_temperature
+                if temperature_diff > 0:
+                    temperature_trend = "↑"
+                elif temperature_diff < 0:
+                    temperature_trend = "↓"
+                else:
+                    temperature_trend = "→"
+            else:
+                temperature_trend = "→"
+            
+            # 判断市场情绪状态
+            if latest_valuation.market_temperature is None:
+                market_sentiment = "Unknown"  # 未知状态
+            elif latest_valuation.market_temperature <= 30:
+                market_sentiment = "Low"  # 低估
+            elif latest_valuation.market_temperature <= 70:
+                market_sentiment = "Medium"  # 中估
+            else:
+                market_sentiment = "High"  # 高估
+            
             # 获取 2024 年 12 月 2 日至今的市场温度数据
             temperature_history = MarketValuation.objects.filter(
                 date__gte='2024-12-02'
@@ -210,18 +240,42 @@ class MarketValuationView(APIView):
                 'market_temperature'
             ).order_by('date')
 
-            return {
+            result = {
                 "margin_trading": {
                     "margin_balance": float(latest_margin["margin_balance"]),
                     "margin_security_balance": float(latest_margin["securities_balance"]),
                     "margin_total": float(latest_margin["margin_balance"]) + float(latest_margin["securities_balance"]),
                     "date": latest_margin["date"].strftime("%Y-%m-%d")
                 },
+                "market_temperature": {
+                    "temperature": latest_valuation.market_temperature,
+                    "temperature_trend": temperature_trend,
+                    "market_sentiment": market_sentiment
+                },
                 "temperature_trend": temperature_history
             }
             
+            return result
+            
         except Exception as e:
-            return {}
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in _get_market_sentiment: {str(e)}")
+            # 返回默认结构，避免 KeyError
+            return {
+                "margin_trading": {
+                    "margin_balance": 0.0,
+                    "margin_security_balance": 0.0,
+                    "margin_total": 0.0,
+                    "date": "2025-07-11"
+                },
+                "market_temperature": {
+                    "temperature": 0.0,
+                    "temperature_trend": "→",
+                    "market_sentiment": "Unknown"
+                },
+                "temperature_trend": []
+            }
 
     @staticmethod
     def _compare_market_trend(latest_temperature, previous_temperature):
