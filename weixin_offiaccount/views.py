@@ -457,10 +457,18 @@ class MarketValuationSyncView(APIView):
             industry_valuation = data['industry_valuation'] # 行业整体估值
 
             # 构建标题
-            title_0=f"今日市场估值（{market_overview['date']}）"
+            # 将日期格式从 YYYY-MM-DD 改为 MMDD
+            date_obj = datetime.strptime(market_overview['date'], '%Y-%m-%d')
+            formatted_date = date_obj.strftime('%m%d')
+            title_0=f"今日市场估值（{formatted_date}）"
 
             # 构建摘要
-            digest_0 = f"""最新温度：{int(market_sentiment['market_temperature']['temperature'])}° {get_trend_text(market_sentiment['market_temperature'].get('temperature_trend', '-'))}，全市场处于{get_status_text(market_sentiment['market_temperature'].get('market_sentiment', '-'))}状态 """
+            market_temp = market_sentiment.get('market_temperature', {})
+            temperature_value = market_temp.get('temperature', 0)
+            temperature_trend = market_temp.get('temperature_trend', '-')
+            market_sentiment_status = market_temp.get('market_sentiment', '-')
+            
+            digest_0 = f"""最新温度：{int(temperature_value) if temperature_value else 0}° {get_trend_text(temperature_trend)}，全市场处于{get_status_text(market_sentiment_status)}状态 """
             thumb_media_id_0 = settings.WECHAT_DEFAULT_THUMB_MEDIA_ID_BLACK13EARD
 
             # 构建文章结尾签名
@@ -470,7 +478,7 @@ class MarketValuationSyncView(APIView):
             # 构建正文内容
             content_0 = f"""
 <section style="font-size: 14px; padding: 10px;"><section style="margin: 10px 0;"><h3 style="color: #333; font-weight: bold;">◆ 市场整体估值</h3><br>
-<span style="font-size: 14px;">最新温度：<span style="color: {get_status_color(market_sentiment['market_temperature'].get('market_sentiment', '-'))}; font-weight: bold;">{int(market_sentiment['market_temperature']['temperature'])}°</span> {get_trend_text(market_sentiment['market_temperature'].get('temperature_trend', '-'))}，全市场处于 <span style="color: {get_status_color(market_sentiment['market_temperature'].get('market_sentiment', '-'))}; font-weight: bold;">{get_status_text(market_sentiment['market_temperature'].get('market_sentiment', '-'))}</span> 状态。</span><br><br>
+<span style="font-size: 14px;">最新温度：<span style="color: {get_status_color(market_sentiment_status)}; font-weight: bold;">{int(temperature_value) if temperature_value else 0}°</span> {get_trend_text(temperature_trend)}，全市场处于 <span style="color: {get_status_color(market_sentiment_status)}; font-weight: bold;">{get_status_text(market_sentiment_status)}</span> 状态。</span><br><br>
 <table style="width: 100%; border-collapse: collapse; background-color: #f8f9fa;"><tr style="background-color: #f1f8ff;">
 <th style="padding: 6px; text-align: left; border: 1px solid #eee;">指标</th>
 <th style="padding: 6px; text-align: center; border: 1px solid #eee;">数值</th>
@@ -517,7 +525,7 @@ class MarketValuationSyncView(APIView):
             cb_data = response.data['data']
 
 
-            title_1 = f"「PlanB」今日可转债数据"
+            title_1 = f"「PlanB」今日可转债数据（{formatted_date}）"
             digest_1 = f"「PlanB」每日财经新闻及可转债市场数据分享"
             thumb_media_id_1 = '_keMPIcYylD5UoO-1wwN4H_qSiejWTdRVoPLSuWZfnMX_j9iGLnL96E6aMCbQ0kC'
             head_img_url_covertablebonds = f"https://mmbiz.qpic.cn/sz_mmbiz_png/YPR2LvJic9CmqdXpcLmlFJ48h5lFxibXCibcox7AXFKERoyM2SupvB1Z9FzHnYXkDPavyrpXUKt5nlh3xyaz3aPQg/0?wx_fmt=png&from=appmsg"
@@ -540,7 +548,7 @@ class MarketValuationSyncView(APIView):
 </table>"""
 
             # 构建双低可转债
-            content_table_doublelow = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 双低-可转债</h3>
+            content_table_doublelow = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 双低策略</h3>
 <table style="width: 100%; border-collapse: collapse; background-color: #f8f9fa;"><tr style="background-color: #f1f8ff;">
 <th style="width: 50%; padding: 6px; text-align: left; border: 1px solid #eee;">转债名称</th>
 <th style="width: 25%; padding: 6px; text-align: center; border: 1px solid #eee;">双低值</th>
@@ -548,7 +556,7 @@ class MarketValuationSyncView(APIView):
 </tr>{generate_cb_doublelow_rows(cb_data['cb_doublelow_data'])}</table>"""
             
             # 构建小盘低价格可转债
-            content_table_small_lowprice = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 小盘低价格-可转债</h3>
+            content_table_small_lowprice = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 小盘低价格策略</h3>
 <table style="width: 100%; border-collapse: collapse; background-color: #f8f9fa;"><tr style="background-color: #f1f8ff;">
 <th style="width: 50%; padding: 6px; text-align: left; border: 1px solid #eee;">转债名称</th>
 <th style="width: 25%; padding: 6px; text-align: center; border: 1px solid #eee;">价格</th>
@@ -556,7 +564,7 @@ class MarketValuationSyncView(APIView):
 </tr>{generate_cb_small_lowprice_rows(cb_data['cb_smallsize_data'])}</table>"""
             
             # 构建小盘低溢价可转债
-            content_table_small_lowpremium_rate = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 小盘低溢价-可转债</h3>
+            content_table_small_lowpremium_rate = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 小盘低溢价策略</h3>
 <table style="width: 100%; border-collapse: collapse; background-color: #f8f9fa;"><tr style="background-color: #f1f8ff;">
 <th style="width: 50%; padding: 6px; text-align: left; border: 1px solid #eee;">转债名称</th>
 <th style="width: 25%; padding: 6px; text-align: center; border: 1px solid #eee;">溢价率</th>
@@ -564,7 +572,7 @@ class MarketValuationSyncView(APIView):
 </tr>{generate_cb_small_lowpremium_rate_rows(cb_data['cb_smallsize_data'])}</table>"""
 
             # 构建已公告强赎可转债
-            content_table_cb_redemption_public = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 已公告强赎-可转债</h3>
+            content_table_cb_redemption_public = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 已公告强赎</h3>
 <table style="width: 100%; border-collapse: collapse; background-color: #f8f9fa;"><tr style="background-color: #f1f8ff;">
 <th style="width: 40%; padding: 6px; text-align: left; border: 1px solid #eee;">转债名称</th>
 <th style="width: 20%; padding: 6px; text-align: center; border: 1px solid #eee;">强赎价</th>
@@ -572,7 +580,7 @@ class MarketValuationSyncView(APIView):
 </tr>{generate_cb_redemption_public_rows(cb_data['cb_redemption_bonds'])}</table>"""
 
             # 构建强赎倒计时可转债
-            content_table_cb_redemption_countdown = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 强赎倒计时-可转债</h3>
+            content_table_cb_redemption_countdown = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 强赎倒计时</h3>
 <table style="width: 100%; border-collapse: collapse; background-color: #f8f9fa;"><tr style="background-color: #f1f8ff;">
 <th style="width: 40%; padding: 6px; text-align: left; border: 1px solid #eee;">转债名称</th>
 <th style="width: 20%; padding: 6px; text-align: center; border: 1px solid #eee;">强赎触发价</th>
@@ -649,7 +657,8 @@ def get_status_color(status):
     color_map = {
         'High': '#ff4d4f',    # 红色 - 高估
         'Medium': '#ff9900',   # 橙色 - 中估
-        'Low': '#52c41a'      # 绿色 - 低估
+        'Low': '#52c41a',     # 绿色 - 低估
+        'Unknown': '#8c8c8c'   # 灰色 - 未知状态
     }
     return color_map.get(status, '#ff9900')  # 默认返回橙色
 
@@ -658,7 +667,8 @@ def get_status_text(status):
     text_map = {
         'High': '高估',
         'Medium': '中估',
-        'Low': '低估'
+        'Low': '低估',
+        'Unknown': '未知'
     }
     return text_map.get(status, '-')
 

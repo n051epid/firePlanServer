@@ -1,8 +1,8 @@
-from datetime import datetime,timedelta
+from datetime import datetime, timedelta, date
 import akshare as ak
 import pandas as pd
 from django.db import transaction
-from ..models import MarketValuation, IndexData, MarginTradingData, IndustryValuation, StockData, BondData, BondIndexData,BigDataStrategyStockData
+from ..models import MarketValuation, IndexData, MarginTradingData, IndustryValuation, StockData, BondData, BondIndexData,BigDataStrategyStockData, StockHistoryData
 import requests
 import zipfile
 import io
@@ -43,307 +43,356 @@ class MarketDataFetcher:
             return None
 
     @staticmethod
-    def fetch_daily_market_data(date=None):
+    def fetch_daily_market_data(start_date=None, end_date=None):
         """获取市场整体估值数据"""
-        # logger.info(f"Fetcher: Fetching daily market data for date: {date}")
+        logger.info(f"Fetcher: Fetching daily market data for date: {start_date} to {end_date}")
+        
+        # 定义获取市场整体估值数据函数
+        def get_stock_market_pe_pb(px, symbol):
+            logger.info(f"Fetcher: Getting {px} data for {symbol}")
+            if px == 'pe':
+                try:
+                    data = ak.stock_market_pe_lg(symbol=symbol)
+                    return data
+                except Exception as e:
+                    logger.error(f"get_stock_market_pe Error: {e}")
+                    logger.info(f"Restart celery service")
+                    # 重启celery服务：sudo systemctl restart celery_worker_fireplan.service
+                    if os.environ.get('SERVER_MODE') == 'release':
+                        os.system('sudo systemctl restart celery_worker_fireplan_release.service')
+                    else:
+                        os.system('sudo systemctl restart celery_worker_fireplan.service')
+                    raise Exception(f"Failed to fetch data,restart celery service")
+            elif px == 'pb':
+                try:
+                    data = ak.stock_market_pb_lg(symbol=symbol)
+                    return data
+                except Exception as e:
+                    logger.error(f"get_stock_market_pb Error: {e}")
+                    logger.info(f"Restart celery service")
+                    # 重启celery服务：sudo systemctl restart celery_worker_fireplan.service
+                    if os.environ.get('SERVER_MODE') == 'release':
+                        os.system('sudo systemctl restart celery_worker_fireplan_release.service')
+                    else:
+                        os.system('sudo systemctl restart celery_worker_fireplan.service')
+                    raise Exception(f"Failed to fetch data,restart celery service")
 
+        # 获取上证指数估值数据
         try:
-            if date:
-                today = date
-            else:
-                today = datetime.now().strftime('%Y%m%d')
-            
-            # 添加请求头(非必要)
+            # 添加请求头
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
             }
             
-            # 获取上证指数行情
-            try:
-                sh_index = ak.stock_zh_index_daily(symbol="sh000001")
-                if sh_index.empty:
-                    logger.error("Failed to fetch Shanghai index data")
-                    return {'status': 'error', 'message': 'Failed to fetch Shanghai index data'}
-            except Exception as e:
-                logger.error(f"Error fetching Shanghai index: {str(e)}")
-                return {'status': 'error', 'message': f'Error fetching Shanghai index: {str(e)}'}
-            
-            sh_index['date'] = pd.to_datetime(sh_index['date'])
-            
-            # 添加数据验证
-            latest_sh_data = sh_index[sh_index['date'].dt.strftime('%Y%m%d')==today]
-            if latest_sh_data.empty:
-                return {
-                    'status': 'error',
-                    'message': f'No Shanghai index data found for date {today}'
-                }
-            
-            latest_sh_index = latest_sh_data['close'].iloc[0]
-            
-            # 获取上证指数估值数据
-            def get_stock_market_pe_pb(px,symbol):
-                if px == 'pe':
-                    try:
-                        data = ak.stock_market_pe_lg(symbol=symbol)
-                        return data
-                    except Exception as e:
-                        logger.error(f"get_stock_market_pe Error: {e}")
-                        logger.info(f"Restart celery service")
-                        # 重启celery服务：sudo systemctl restart celery_worker_fireplan.service
-                        if os.environ.get('SERVER_MODE') == 'release':
-                            os.system('sudo systemctl restart celery_worker_fireplan_release.service')
-                        else:
-                            os.system('sudo systemctl restart celery_worker_fireplan.service')
-                        raise Exception(f"Failed to fetch data,restart celery service")
-                elif px == 'pb':
-                    try:
-                        data = ak.stock_market_pb_lg(symbol=symbol)
-                        return data
-                    except Exception as e:
-                        logger.error(f"get_stock_market_pb Error: {e}")
-                        logger.info(f"Restart celery service")
-                        # 重启celery服务：sudo systemctl restart celery_worker_fireplan.service
-                        if os.environ.get('SERVER_MODE') == 'release':
-                            os.system('sudo systemctl restart celery_worker_fireplan_release.service')
-                        else:
-                            os.system('sudo systemctl restart celery_worker_fireplan.service')
-                        raise Exception(f"Failed to fetch data,restart celery service")
-        
-            sh_pe = get_stock_market_pe_pb('pe','上证')
-            sh_pb = get_stock_market_pe_pb('pb','上证')
-            
-            
-            # 计算12年前的日期
-            current_date = pd.Timestamp(today)
-            twelve_years_ago = current_date - pd.DateOffset(years=12)
-            
-            # 添加数据验证
-            dates = pd.to_datetime(sh_pe['日期'])
-            latest_12_sh_pe_valuation = sh_pe[dates >= twelve_years_ago]
-            if latest_12_sh_pe_valuation.empty:
-                return {
-                    'status': 'error',
-                    'message': 'No PE data found for the last 12 years'
-                }
-            
-            dates = pd.to_datetime(sh_pb['日期'])
-            latest_12_sh_pb_valuation = sh_pb[dates >= twelve_years_ago]
-            if latest_12_sh_pb_valuation.empty:
-                return {
-                    'status': 'error',
-                    'message': 'No PB data found for the last 12 years'
-                }
-            
-            pe_series = latest_12_sh_pe_valuation["平均市盈率"]
-            pb_series = latest_12_sh_pb_valuation["市净率"]
-            
-            # 添加数据验证
-            if pe_series.empty or pb_series.empty:
-                return {
-                    'status': 'error',
-                    'message': 'PE or PB series is empty'
-                }
-            
-            # 添加数据验证
-            try:
-                current_sh_pe = float(pe_series.iloc[-1])
-                current_sh_pb = float(pb_series.iloc[-1])
-            except (IndexError, ValueError) as e:
-                return {
-                    'status': 'error',
-                    'message': f'Error processing PE/PB values: {str(e)}'
-                }
-            
-            # 添加数据验证
-            try:
-                sh_pe_rank = len(pe_series[pe_series <= current_sh_pe]) / len(pe_series) * 100
-                sh_pb_rank = len(pb_series[pb_series <= current_sh_pb]) / len(pb_series) * 100
-            except Exception as e:
-                return {
-                    'status': 'error',
-                    'message': f'Error calculating PE/PB ranks: {str(e)}'
-                }
-
-            # 通过下载表格，获取全市场的估值数据
-            # today = '20241212'
-            # url = f'https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/dl_resource/industry_pe/bk{today}.zip'
-            url = f'https://oss-ch.csindex.com.cn/dl_resource/industry_pe/bk{today}.zip'
-            logger.info(f"Fetcher: url: {url}")
-            # 沪深市场，不包括北交所（京市），近 12 年历史估值区间（2012-01-01 至 2024-11-16）。数据来源：https://legulegu.com/stockdata/a-pe。
-            # 暂无沪深历史动态市盈率数据
-            # history_pe_min = 11.05
-            # history_pe_max = 29.95
-            # history_pb_min = 1.25
-            # history_pb_max = 3.52
-            
-            # 从数据库获取历史极值
-            market_stats = MarketValuation.objects.aggregate(
-                min_pe=Min('pe_ratio'),
-                max_pe=Max('pe_ratio'),
-                min_pb=Min('pb_ratio'),
-                max_pb=Max('pb_ratio')
-            )
-
-            # 更新历史区间值（使用数据库值和默认值中的较小/较大值）
-            history_pe_min = min(market_stats['min_pe'] or float('inf'), 11.05)
-            history_pe_max = max(market_stats['max_pe'] or 0, 29.95)
-            history_pb_min = min(market_stats['min_pb'] or float('inf'), 1.25)
-            history_pb_max = max(market_stats['max_pb'] or 0, 3.52)
-
-            # 添加更多的错误处理和日志记录
-            try:
-                response = requests.get(url, headers=headers)
-                response.raise_for_status()  # 检查响应状态
-                if not response.content:
-                    raise ValueError("Empty response received")
-                
-                # 记录响应内容用于调试
-                logger.debug(f"Response content: {response.content[:200]}...")  # 只记录前200个字符
-                
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Request failed: {str(e)}")
-                return {'status': 'error', 'message': f'Request failed: {str(e)}'}
-            
-            if response.status_code == 200:
-
-                # 获取数据中沪深市场近 12 年的数据（PE、PB）以便于计算估值 Rank 百分位
-                twelve_years_ago = datetime.now() - timedelta(days=365 * 12)
-                historical_market_data = MarketValuation.objects.filter(
-                    sector_name='沪深市场',
-                    date__gte=twelve_years_ago
-                ).values('date', 'pe_ratio', 'pb_ratio').order_by('date')
-
-                # 转换为 DataFrame 以便计算百分位
-                if historical_market_data:
-                    df_historical = pd.DataFrame(list(historical_market_data))  # 添加 list() 转换
-
-                # 解压zip文件
-                with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
-                    # 获取zip中的xls文件名
-                    xls_filename = zip_ref.namelist()[0]
-                    # 创建临时目录
-                    temp_dir = '/tmp/market_data'
-                    os.makedirs(temp_dir, exist_ok=True)
-                    # 解压到临时目录
-                    zip_ref.extract(xls_filename, temp_dir)
-                    
-                    # 读取Excel文件的不同sheet
-                    xls_path = os.path.join(temp_dir, xls_filename)
-                    
-                    # 读取静态市盈率sheet，计算PE区间百分位
-                    df_static = pd.read_excel(xls_path, sheet_name='板块静态市盈率')
-                    market_row = df_static[df_static['板块名称'] == '沪深市场'].iloc[0]
-                    pe_ratio = round(float(market_row['最新静态\n市盈率']), 2)
-
-                    # 更新历史区间值并计算区间百分位
-                    history_pe_min = min(history_pe_min, pe_ratio)
-                    history_pe_max = max(history_pe_max, pe_ratio)
-                    pe_range_percentile = 0 if pe_ratio <= history_pe_min else (
-                        100 if pe_ratio >= history_pe_max else
-                        (pe_ratio - history_pe_min) / (history_pe_max - history_pe_min) * 100
-                    )
-                    # 计算当前 PE 在历史数据中的 Rank 百分位
-                    current_pe = pe_ratio
-                    pe_rank = len(df_historical[df_historical['pe_ratio'] <= current_pe]) / len(df_historical) * 100
-                    pe_rank = round(pe_rank, 2)
-
-                    # 读取滚动市盈率sheet
-                    df_pe_ttm = pd.read_excel(xls_path, sheet_name='板块滚动市盈率')
-                    market_row = df_pe_ttm[df_pe_ttm['板块名称'] == '沪深市场'].iloc[0]
-                    pe_ttm_ratio = round(float(market_row['最新滚动\n市盈率']), 2)
-
-                    # 读取市净率sheet，计算PB区间百分位
-                    df_pb = pd.read_excel(xls_path, sheet_name='板块市净率')
-                    market_row = df_pb[df_pb['板块名称'] == '沪深市场'].iloc[0]
-                    pb_ratio = round(float(market_row['最新市净率']), 2)
-                    
-                    # 更新历史区间值并计算区间百分位
-                    history_pb_min = min(history_pb_min, pb_ratio)
-                    history_pb_max = max(history_pb_max, pb_ratio)
-                    pb_range_percentile = 0 if pb_ratio <= history_pb_min else (
-                        100 if pb_ratio >= history_pb_max else
-                        (pb_ratio - history_pb_min) / (history_pb_max - history_pb_min) * 100
-                    )
-                    # 计算当前 PB 在历史数据中的 Rank 百分位
-                    current_pb = pb_ratio
-                    pb_rank = len(df_historical[df_historical['pb_ratio'] <= current_pb]) / len(df_historical) * 100
-                    pb_rank = round(pb_rank, 2)
-
-                    # 读取股息率sheet
-                    df_dividend = pd.read_excel(xls_path, sheet_name='板块股息率')
-                    market_row = df_dividend[df_dividend['板块名称'] == '沪深市场'].iloc[0]
-                    dividend_ratio = round(float(market_row['最新股息率']), 2)
-                    
-                    # 获取沪深市场数据
-                    stock_count = int(market_row['股票家数'])
-
-                    # 获取最新市场温度数据之一(930903: 中证A股,000985: 中证全指)
-                    market_temperatures_index = IndexData.objects.filter(
-                        code='000985',
-                        date=today
-                    ).values(
-                        'percentile'
-                    )
-
-                    # 平权计算三个指标（全市场 PE_Rank、全市场 PB_Rank、指数温度）
-                    if market_temperatures_index:
-                        logger.info('==================== 有指数温度数据 ====================')
-                        market_temperature = (pe_rank + pb_rank + market_temperatures_index[0]['percentile'])/3
-                    else:
-                        # 如果没有指数温度数据，只使用 PE 和 PB 的 rank
-                        logger.warning('==================== 没有指数温度数据 ====================')
-                        market_temperature = (pe_rank + pb_rank)/2
-                    
-                    # 清空临时文件
-                    os.remove(xls_path)
-            
-            # 获取东方财富网-沪深京 A 股-实时行情数据
-            market_data = ak.stock_zh_a_spot_em()
-            total_volume = market_data['成交量'].sum()
-            total_amount = market_data['成交额'].sum()
-            
-            # 创建并保存 MarketValuation 实例
-            with transaction.atomic():
-                valuation = MarketValuation(
-                    date=today,
-                    sector_name='沪深市场',
-                    pe_ratio=pe_ratio,
-                    pe_range_percentile=round(pe_range_percentile, 2),
-                    pe_rank_percentile=round(pe_rank, 2),
-                    pe_ttm_ratio=pe_ttm_ratio,
-                    pb_ratio=pb_ratio,
-                    pb_range_percentile=round(pb_range_percentile, 2),
-                    pb_rank_percentile=round(pb_rank, 2),
-                    dividend_ratio=dividend_ratio,
-                    stock_count=stock_count,
-                    total_volume=total_volume,
-                    total_amount=total_amount,
-                    market_temperature=round(market_temperature, 2),
-                    sh_index=latest_sh_index,
-                    sh_pe_rank_percentile=round(sh_pe_rank, 2),
-                    sh_pb_rank_percentile=round(sh_pb_rank, 2),
-                    created_at=datetime.now()
-                )
-                
-                # 检查是否已存在同一天的数据
-                existing = MarketValuation.objects.filter(date=today).first()
-                if existing:
-                    for field in ['pe_ratio', 'market_temperature', 'pe_range_percentile', 'pe_rank_percentile', 'pb_ratio', 'pb_range_percentile', 'pb_rank_percentile', 'pe_ttm_ratio', 'dividend_ratio', 'stock_count', 'total_volume', 'total_amount', 
-                                'sh_index', 'sh_pe_rank_percentile', 'sh_pb_rank_percentile']:
-                        setattr(existing, field, getattr(valuation, field))
-                    existing.save()
-                    logger.info(f"Fetcher: Market valuation data existing and updated.")
-                    return {
-                        'status': 'success',
-                        'message': 'Market valuation data existing and updated,market_temperature: '+str(valuation.market_temperature)
-                    }
+            if start_date and end_date:
+                # 如果传入的是字符串格式 'YYYYMMDD'，需要指定格式
+                if isinstance(start_date, str):
+                    start_date = pd.to_datetime(start_date, format='%Y%m%d')
                 else:
-                    valuation.save()
-                    logger.info(f"Fetcher: New market valuation data created.")
-                    return {
-                        'status': 'success',
-                        'message': 'New market valuation data created'
-                    }
+                    start_date = pd.to_datetime(start_date)
+                if isinstance(end_date, str):
+                    end_date = pd.to_datetime(end_date, format='%Y%m%d')
+                else:
+                    end_date = pd.to_datetime(end_date)
+            else:
+                start_date = pd.to_datetime(datetime.now().strftime('%Y%m%d'), format='%Y%m%d')
+                end_date = start_date
+
+            date_list = []
+            current_date = start_date
+            while current_date <= end_date:
+                if current_date.weekday() < 5:  # 0-4 表示周一到周五
+                    date_list.append(current_date.strftime('%Y%m%d'))
+                # 使用 pd.Timedelta 或转换为 datetime 后使用 timedelta
+                current_date = current_date + pd.Timedelta(days=1)
+            
+            if len(date_list) == 0:
+                return {'status': 'error', 'message': 'No date list'}
+            else:
+                success_count = 0
+                fail_count = 0
+                sh_pe = get_stock_market_pe_pb('pe','上证')
+                sh_pb = get_stock_market_pe_pb('pb','上证')
+                
+                # 获取上证指数行情
+                try:
+                    sh_index = ak.stock_zh_index_daily(symbol="sh000001")
+                    if sh_index.empty:
+                        logger.error("Failed to fetch Shanghai index data")
+                        return {'status': 'error', 'message': 'Failed to fetch Shanghai index data'}
+                except Exception as e:
+                    logger.error(f"Error fetching Shanghai index: {str(e)}")
+                    return {'status': 'error', 'message': f'Error fetching Shanghai index: {str(e)}'}
+                
+                sh_index['date'] = pd.to_datetime(sh_index['date'])
+                
+                # 获取东方财富网-沪深京 A 股-实时行情数据(只能是最新的，无法指定日期)
+                market_data = ak.stock_zh_a_spot_em()
+                total_volume = market_data['成交量'].sum()
+                total_amount = market_data['成交额'].sum()
+
+                for date in date_list:
+                    try:
+                        today = date
+                        logger.info(f"处理日期: {today}")
+                        
+                        # 验证当天是否有上证指数数据
+                        try:
+                            today_date = pd.to_datetime(today, format='%Y%m%d').date()
+                        except:
+                            # 如果转换失败，尝试其他格式
+                            today_date = pd.to_datetime(today).date()
+                        
+                        # 比较日期部分（不比较时间）
+                        latest_sh_data = sh_index[sh_index['date'].dt.date == today_date]
+                        
+                        # 如果当天没有数据，跳过该日期
+                        if latest_sh_data.empty:
+                            logger.warning(f"日期 {today} 没有上证指数数据，跳过")
+                            fail_count += 1
+                            continue
+                        
+                        # 仅用于更新本条数据的sh_index字段，后续不会使用
+                        latest_sh_index = latest_sh_data['close'].iloc[0]
+                        
+                        # 计算12年前的日期
+                        current_date = pd.Timestamp(today)
+                        twelve_years_ago = current_date - pd.DateOffset(years=12)
+                        
+                        # 添加数据验证
+                        dates = pd.to_datetime(sh_pe['日期'])
+                        latest_12_sh_pe_valuation = sh_pe[dates >= twelve_years_ago]
+                        if latest_12_sh_pe_valuation.empty:
+                            return {
+                                'status': 'error',
+                                'message': 'No PE data found for the last 12 years'
+                            }
+                        dates = pd.to_datetime(sh_pb['日期'])
+                        latest_12_sh_pb_valuation = sh_pb[dates >= twelve_years_ago]
+                        if latest_12_sh_pb_valuation.empty:
+                            return {
+                                'status': 'error',
+                                'message': 'No PB data found for the last 12 years'
+                            }
+                        
+            
+                        pe_series = latest_12_sh_pe_valuation["平均市盈率"]
+                        pb_series = latest_12_sh_pb_valuation["市净率"]
+                        
+                        # 添加数据验证
+                        if pe_series.empty or pb_series.empty:
+                            return {
+                                'status': 'error',
+                                'message': 'PE or PB series is empty'
+                            }
+                        
+                        # 添加数据验证
+                        try:
+                            current_sh_pe = float(pe_series.iloc[-1])
+                            current_sh_pb = float(pb_series.iloc[-1])
+                        except (IndexError, ValueError) as e:
+                            return {
+                                'status': 'error',
+                                'message': f'Error processing PE/PB values: {str(e)}'
+                            }
+                        
+                        # 添加数据验证
+                        try:
+                            sh_pe_rank = len(pe_series[pe_series <= current_sh_pe]) / len(pe_series) * 100
+                            sh_pb_rank = len(pb_series[pb_series <= current_sh_pb]) / len(pb_series) * 100
+                        except Exception as e:
+                            return {
+                                'status': 'error',
+                                'message': f'Error calculating PE/PB ranks: {str(e)}'
+                            }
+
+                        # 通过下载表格，获取全市场的估值数据
+                        # today = '20241212'
+                        # url = f'https://csi-web-dev.oss-cn-shanghai-finance-1-pub.aliyuncs.com/dl_resource/industry_pe/bk{today}.zip'
+                        url = f'https://oss-ch.csindex.com.cn/dl_resource/industry_pe/bk{today}.zip'
+                        logger.info(f"Fetcher: url: {url}")
+                        # 沪深市场，不包括北交所（京市），近 12 年历史估值区间（2012-01-01 至 2024-11-16）。数据来源：https://legulegu.com/stockdata/a-pe。
+                        # 暂无沪深历史动态市盈率数据
+                        # history_pe_min = 11.05
+                        # history_pe_max = 29.95
+                        # history_pb_min = 1.25
+                        # history_pb_max = 3.52
+                        
+                        # 从数据库获取历史极值
+                        market_stats = MarketValuation.objects.aggregate(
+                            min_pe=Min('pe_ratio'),
+                            max_pe=Max('pe_ratio'),
+                            min_pb=Min('pb_ratio'),
+                            max_pb=Max('pb_ratio')
+                        )
+
+                        # 更新历史区间值（使用数据库值和默认值中的较小/较大值）
+                        history_pe_min = min(market_stats['min_pe'] or float('inf'), 11.05)
+                        history_pe_max = max(market_stats['max_pe'] or 0, 29.95)
+                        history_pb_min = min(market_stats['min_pb'] or float('inf'), 1.25)
+                        history_pb_max = max(market_stats['max_pb'] or 0, 3.52)
+
+                        # 添加更多的错误处理和日志记录
+                        try:
+                            response = requests.get(url, headers=headers)
+                            response.raise_for_status()  # 检查响应状态
+                            if not response.content:
+                                raise ValueError("Empty response received")
+                            
+                            # 记录响应内容用于调试
+                            logger.debug(f"Response content: {response.content[:200]}...")  # 只记录前200个字符
+                            
+                        except requests.exceptions.RequestException as e:
+                            logger.error(f"Request failed: {str(e)}")
+                            return {'status': 'error', 'message': f'Request failed: {str(e)}'}
+                        
+                        if response.status_code == 200:
+
+                            # 获取数据中沪深市场近 12 年的数据（PE、PB）以便于计算估值 Rank 百分位
+                            twelve_years_ago = datetime.now() - timedelta(days=365 * 12)
+                            historical_market_data = MarketValuation.objects.filter(
+                                sector_name='沪深市场',
+                                date__gte=twelve_years_ago
+                            ).values('date', 'pe_ratio', 'pb_ratio').order_by('date')
+
+                            # 转换为 DataFrame 以便计算百分位
+                            if historical_market_data:
+                                df_historical = pd.DataFrame(list(historical_market_data))  # 添加 list() 转换
+
+                            # 解压zip文件
+                            with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
+                                # 获取zip中的xls文件名
+                                xls_filename = zip_ref.namelist()[0]
+                                # 创建临时目录
+                                temp_dir = '/tmp/market_data'
+                                os.makedirs(temp_dir, exist_ok=True)
+                                # 解压到临时目录
+                                zip_ref.extract(xls_filename, temp_dir)
+                                
+                                # 读取Excel文件的不同sheet
+                                xls_path = os.path.join(temp_dir, xls_filename)
+                                
+                                # 读取静态市盈率sheet，计算PE区间百分位
+                                df_static = pd.read_excel(xls_path, sheet_name='板块静态市盈率')
+                                market_row = df_static[df_static['板块名称'] == '沪深市场'].iloc[0]
+                                pe_ratio = round(float(market_row['最新静态\n市盈率']), 2)
+
+                                # 更新历史区间值并计算区间百分位
+                                history_pe_min = min(history_pe_min, pe_ratio)
+                                history_pe_max = max(history_pe_max, pe_ratio)
+                                pe_range_percentile = 0 if pe_ratio <= history_pe_min else (
+                                    100 if pe_ratio >= history_pe_max else
+                                    (pe_ratio - history_pe_min) / (history_pe_max - history_pe_min) * 100
+                                )
+                                # 计算当前 PE 在历史数据中的 Rank 百分位
+                                current_pe = pe_ratio
+                                pe_rank = len(df_historical[df_historical['pe_ratio'] <= current_pe]) / len(df_historical) * 100
+                                pe_rank = round(pe_rank, 2)
+
+                                # 读取滚动市盈率sheet
+                                df_pe_ttm = pd.read_excel(xls_path, sheet_name='板块滚动市盈率')
+                                market_row = df_pe_ttm[df_pe_ttm['板块名称'] == '沪深市场'].iloc[0]
+                                pe_ttm_ratio = round(float(market_row['最新滚动\n市盈率']), 2)
+
+                                # 读取市净率sheet，计算PB区间百分位
+                                df_pb = pd.read_excel(xls_path, sheet_name='板块市净率')
+                                market_row = df_pb[df_pb['板块名称'] == '沪深市场'].iloc[0]
+                                pb_ratio = round(float(market_row['最新市净率']), 2)
+                                
+                                # 更新历史区间值并计算区间百分位
+                                history_pb_min = min(history_pb_min, pb_ratio)
+                                history_pb_max = max(history_pb_max, pb_ratio)
+                                pb_range_percentile = 0 if pb_ratio <= history_pb_min else (
+                                    100 if pb_ratio >= history_pb_max else
+                                    (pb_ratio - history_pb_min) / (history_pb_max - history_pb_min) * 100
+                                )
+                                # 计算当前 PB 在历史数据中的 Rank 百分位
+                                current_pb = pb_ratio
+                                pb_rank = len(df_historical[df_historical['pb_ratio'] <= current_pb]) / len(df_historical) * 100
+                                pb_rank = round(pb_rank, 2)
+
+                                # 读取股息率sheet
+                                df_dividend = pd.read_excel(xls_path, sheet_name='板块股息率')
+                                market_row = df_dividend[df_dividend['板块名称'] == '沪深市场'].iloc[0]
+                                dividend_ratio = round(float(market_row['最新股息率']), 2)
+                                
+                                # 获取沪深市场数据
+                                stock_count = int(market_row['股票家数'])
+
+                                # 获取最新市场温度数据之一(930903: 中证A股,000985: 中证全指)
+                                market_temperatures_index = IndexData.objects.filter(
+                                    code='000985',
+                                    date=today
+                                ).values(
+                                    'percentile'
+                                )
+
+                                # 平权计算三个指标（全市场 PE_Rank、全市场 PB_Rank、指数温度）
+                                if market_temperatures_index:
+                                    logger.info('==================== 有指数温度数据 ====================')
+                                    market_temperature = (pe_rank + pb_rank + market_temperatures_index[0]['percentile'])/3
+                                else:
+                                    # 如果没有指数温度数据，只使用 PE 和 PB 的 rank
+                                    logger.warning('==================== 没有指数温度数据 ====================')
+                                    market_temperature = (pe_rank + pb_rank)/2
+                                
+                                # 清空临时文件
+                                os.remove(xls_path)
+                        
+                        
+                        
+                        # 创建并保存 MarketValuation 实例
+                        with transaction.atomic():
+                            valuation = MarketValuation(
+                                date=today,
+                                sector_name='沪深市场',
+                                pe_ratio=pe_ratio,
+                                pe_range_percentile=round(pe_range_percentile, 2),
+                                pe_rank_percentile=round(pe_rank, 2),
+                                pe_ttm_ratio=pe_ttm_ratio,
+                                pb_ratio=pb_ratio,
+                                pb_range_percentile=round(pb_range_percentile, 2),
+                                pb_rank_percentile=round(pb_rank, 2),
+                                dividend_ratio=dividend_ratio,
+                                stock_count=stock_count,
+                                total_volume=total_volume,
+                                total_amount=total_amount,
+                                market_temperature=round(market_temperature, 2),
+                                sh_index=latest_sh_index,
+                                sh_pe_rank_percentile=round(sh_pe_rank, 2),
+                                sh_pb_rank_percentile=round(sh_pb_rank, 2),
+                                created_at=datetime.now()
+                            )
+                            
+                            # 检查是否已存在同一天的数据
+                            existing = MarketValuation.objects.filter(date=today).first()
+                            if existing:
+                                for field in ['pe_ratio', 'market_temperature', 'pe_range_percentile', 'pe_rank_percentile', 'pb_ratio', 'pb_range_percentile', 'pb_rank_percentile', 'pe_ttm_ratio', 'dividend_ratio', 'stock_count', 'total_volume', 'total_amount', 
+                                            'sh_index', 'sh_pe_rank_percentile', 'sh_pb_rank_percentile']:
+                                    setattr(existing, field, getattr(valuation, field))
+                                existing.save()
+                                logger.info(f"Fetcher: Market valuation data existing and updated for date {today}.")
+                                success_count += 1
+                                continue  # 继续处理下一个日期
+                            else:
+                                valuation.save()
+                                logger.info(f"Fetcher: New market valuation data created for date {today}.")
+                                success_count += 1
+                                continue  # 继续处理下一个日期
+                                
+                    except Exception as e:
+                        logger.error(f"Error in fetch_daily_market_data for date {today}: {str(e)}")
+                        fail_count += 1
+                        continue  # 继续处理下一个日期
+                
+                # 循环结束后返回汇总结果
+                return {
+                    'status': 'completed',
+                    'total': len(date_list),
+                    'success': success_count,
+                    'failed': fail_count,
+                    'message': f'处理完成: 成功 {success_count} 天, 失败 {fail_count} 天'
+                }
                     
         except Exception as e:
             logger.error(f"Error in fetch_daily_market_data: {str(e)}")
@@ -883,23 +932,193 @@ class MarketDataFetcher:
             # 准备批量更新的数据
             bulk_data = []
             
-            for stock in stocks:
+            # 测试阶段：只处理前3个数据，每个间隔5秒
+            # 测试完成后，如需恢复生产模式，将 stocks[:3] 改回 stocks，并将间隔逻辑改回每10个暂停1秒
+            # test_stocks = stocks[:20]
+            # logger.info(f"测试模式：只处理前 {len(test_stocks)} 个股票，每个间隔5秒")
+            
+            for i, stock in enumerate(stocks):
+                logger.info(f"处理股票: {stock.code} - {stock.name}")
+
                 try:
-                    # 获取历史数据
-                    hist_df = ak.stock_zh_a_hist(
-                        symbol=stock.code,
-                        period="monthly",
-                        start_date=start_date.strftime(date_format),
-                        end_date=end_date.strftime(date_format),
-                        adjust="qfq"
-                    )
+                    # 测试阶段：每个数据间隔5秒
+                    if i > 0:
+                        logger.info(f"等待5秒后处理下一个股票... (当前: {i}/{len(test_stocks)})")
                     
-                    if not hist_df.empty:
-                        # 计算近一年最低点涨幅
-                        one_year_min = hist_df['最低'].min()
-                        one_year_increase = (stock.close - one_year_min) / one_year_min * 100
-                    else:
-                        one_year_min = one_year_increase = None,
+                    # 获取历史数据
+                    try:
+                        # 先检查本地是否有该股票的历史数据
+                        
+                        # 检查是否有该股票的历史数据
+                        existing_data = StockHistoryData.objects.filter(
+                            code=stock.code,
+                            period="monthly",
+                            adjust="qfq"
+                        ).order_by('-date')
+                        
+                        if existing_data.exists():
+                            logger.info(f"有本地数据，检查是否有最新一个月的数据")
+                            # 有本地数据，检查是否有最新一个月的数据
+                            latest_date = existing_data.first().date
+                            current_date = datetime.now().date()
+                            
+                            # 检查是否需要更新数据（如果最新数据不是当前月份）
+                            if latest_date.month != current_date.month or latest_date.year != current_date.year:
+                                # 需要更新数据，获取最新数据
+                                # 使用 AKTools HTTP API 接口
+                                logger.info(f"无最新数据，使用 AKTools HTTP API 接口获取最新数据")
+                                try:
+                                    # 构建请求参数
+                                    params = {
+                                        'symbol': str(stock.code),
+                                        'period': 'monthly',
+                                        'start_date': start_date.strftime(date_format),
+                                        'end_date': end_date.strftime(date_format),
+                                        'adjust': 'qfq'
+                                    }
+                                    
+                                    # 发送请求到 AKTools API
+                                    # 从环境变量中获取 AKTOOLS_URL
+                                    aktools_url = os.environ.get('AKTOOLS_URL')
+
+                                    response = requests.get(
+                                        f'{aktools_url}/api/public/stock_zh_a_hist',
+                                        params=params,
+                                        timeout=30
+                                    )
+                                    response.raise_for_status()
+                                    
+                                    # 解析 JSON 响应
+                                    data = response.json()
+                                    hist_df = pd.DataFrame(data)
+                                    time.sleep(5)
+                                    
+                                except Exception as api_error:
+                                    # 如果 AKTools API 失败，回退到原始的 akshare 方法
+                                    logger.warning(f"AKTools API 请求失败，回退到 akshare: {str(api_error)}")
+                                    hist_df = ak.stock_zh_a_hist(
+                                        symbol=str(stock.code),
+                                        period="monthly",
+                                        start_date=start_date.strftime(date_format),
+                                        end_date=end_date.strftime(date_format),
+                                        adjust="qfq"
+                                    )
+                                    time.sleep(5)
+                                
+                                if not hist_df.empty:
+                                    # 保存新数据到本地
+                                    for _, row in hist_df.iterrows():
+                                        # 安全处理日期：如果已经是 date 对象就直接使用，否则转换为 date
+                                        row_date = row['日期']
+                                        if isinstance(row_date, datetime):
+                                            row_date = row_date.date()
+                                        elif not isinstance(row_date, date):
+                                            # 如果是字符串或其他类型，尝试转换
+                                            row_date = pd.to_datetime(row_date).date()
+                                        
+                                        StockHistoryData.objects.update_or_create(
+                                            date=row_date,
+                                            code=stock.code,
+                                            period="monthly",
+                                            adjust="qfq",
+                                            defaults={
+                                                'name': stock.name,
+                                                'close': row['收盘']
+                                            }
+                                        )
+                                    
+                                    # 重新获取本地数据用于计算
+                                    local_data = StockHistoryData.objects.filter(
+                                        code=stock.code,
+                                        period="monthly",
+                                        adjust="qfq"
+                                    ).order_by('date')
+                                    
+                                    # 计算近一年最低点涨幅
+                                    one_year_min = local_data.aggregate(min_close=Min('close'))['min_close']
+                                    one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
+                                else:
+                                    # 使用本地数据计算
+                                    local_data = existing_data.order_by('date')
+                                    one_year_min = local_data.aggregate(min_close=Min('close'))['min_close']
+                                    one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
+                            else:
+                                # 使用本地数据计算
+                                local_data = existing_data.order_by('date')
+                                one_year_min = local_data.aggregate(min_close=Min('close'))['min_close']
+                                one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
+                        else:
+                            # 没有本地数据，从网络获取并保存
+                            # 使用 AKTools HTTP API 接口
+                            
+                            try:
+                                # 构建请求参数
+                                params = {
+                                    'symbol': str(stock.code),
+                                    'period': 'monthly',
+                                    'start_date': start_date.strftime(date_format),
+                                    'end_date': end_date.strftime(date_format),
+                                    'adjust': 'qfq'
+                                }
+                                
+                                # 发送请求到 AKTools API
+                                # 从环境变量中获取 AKTOOLS_URL
+                                aktools_url = os.environ.get('AKTOOLS_URL')
+                                
+                                logger.info(f"没有本地数据，使用 AKTools HTTP API 接口获取最新数据")
+                                response = requests.get(
+                                    f'{aktools_url}/api/public/stock_zh_a_hist',
+                                    params=params,
+                                    timeout=30
+                                )
+                                response.raise_for_status()
+                                
+                                # 解析 JSON 响应
+                                data = response.json()
+                                hist_df = pd.DataFrame(data)
+                                time.sleep(5)
+
+                            except Exception as api_error:
+                                # 如果 AKTools API 失败，回退到原始的 akshare 方法
+                                logger.warning(f"AKTools API 请求失败，回退到 akshare: {str(api_error)}")
+                                hist_df = ak.stock_zh_a_hist(
+                                    symbol=str(stock.code),
+                                    period="monthly",
+                                    start_date=start_date.strftime(date_format),
+                                    end_date=end_date.strftime(date_format),
+                                    adjust="qfq"
+                                )
+                                time.sleep(5)
+                                
+                            if not hist_df.empty:
+                                # 保存数据到本地
+                                for _, row in hist_df.iterrows():
+                                    # 安全处理日期：如果已经是 date 对象就直接使用，否则转换为 date
+                                    row_date = row['日期']
+                                    if isinstance(row_date, datetime):
+                                        row_date = row_date.date()
+                                    elif not isinstance(row_date, date):
+                                        # 如果是字符串或其他类型，尝试转换
+                                        row_date = pd.to_datetime(row_date).date()
+                                    
+                                    StockHistoryData.objects.create(
+                                        date=row_date,
+                                        code=stock.code,
+                                        name=stock.name,
+                                        period="monthly",
+                                        adjust="qfq",
+                                        close=row['收盘']
+                                    )
+                                
+                                # 计算近一年最低点涨幅
+                                one_year_min = hist_df['收盘'].min()
+                                one_year_increase = (stock.close - one_year_min) / one_year_min * 100
+                            else:
+                                one_year_min = one_year_increase = None
+                    except Exception as e:
+                        # 如果获取历史数据失败，使用默认值
+                        logger.warning(f"获取股票 {stock.code} 历史数据失败，使用默认值: {str(e)}")
+                        one_year_min = one_year_increase = None
                     
                     # 大数评分：获取具体行业历史估值数据
                     stats = industry_stats.get(stock.parent_industry_code, {})

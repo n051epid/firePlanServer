@@ -21,6 +21,7 @@ from .models import (
     MarginTradingData,
     IndustryValuation,
     BondIndexData,
+    StockHistoryData,
 )
 from django.utils.translation import gettext_lazy as _
 from django.contrib import messages
@@ -414,3 +415,25 @@ class MarketValuationAdmin(UpdateDataMixin, admin.ModelAdmin):
     date_hierarchy = 'date'
     ordering = ('-date',)
     app_label = 'market_data'
+
+
+@admin.register(StockHistoryData)
+class StockHistoryDataAdmin(admin.ModelAdmin):
+    list_display = ('code', 'name', 'date', 'close', 'period', 'adjust')
+    list_filter = ('period', 'adjust', 'date','code')
+    search_fields = ('code', 'name')
+    date_hierarchy = 'date'
+    ordering = ('-date', 'code')
+    app_label = 'market_data'
+    
+    def has_add_permission(self, request):
+        # 禁止手动添加数据
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        # 禁止删除数据
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        # 禁止修改数据
+        return False
