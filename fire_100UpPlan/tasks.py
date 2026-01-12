@@ -234,7 +234,7 @@ def fetch_industry_valuation_data(self, start_date=None, end_date=None):
             }
         
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+@shared_task(bind=True, max_retries=3, default_retry_delay=3600)
 def fetch_bigdata_strategy_data(self):
     """大数投资策略数据采集任务"""
     logger.info(f"Task: Fetching bigdata strategy data")
@@ -253,7 +253,7 @@ def fetch_bigdata_strategy_data(self):
         except MaxRetriesExceededError:
             return {'status': 'error', 'message': 'Max retries exceeded'}
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+@shared_task(bind=True, max_retries=3, default_retry_delay=3600)
 def fetch_convertible_bond_data(self):
     """可转债数据采集任务"""
     logger.info(f"Task: Fetching convertible bond data")

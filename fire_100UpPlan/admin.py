@@ -420,7 +420,7 @@ class MarketValuationAdmin(UpdateDataMixin, admin.ModelAdmin):
 @admin.register(StockHistoryData)
 class StockHistoryDataAdmin(admin.ModelAdmin):
     list_display = ('code', 'name', 'date', 'close', 'period', 'adjust')
-    list_filter = ('period', 'adjust', 'date')
+    list_filter = ('period', 'adjust', 'date','code')
     search_fields = ('code', 'name')
     date_hierarchy = 'date'
     ordering = ('-date', 'code')

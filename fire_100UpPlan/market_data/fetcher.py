@@ -97,7 +97,7 @@ class MarketDataFetcher:
             else:
                 start_date = pd.to_datetime(datetime.now().strftime('%Y%m%d'), format='%Y%m%d')
                 end_date = start_date
-                
+
             date_list = []
             current_date = start_date
             while current_date <= end_date:
@@ -934,15 +934,16 @@ class MarketDataFetcher:
             
             # 测试阶段：只处理前3个数据，每个间隔5秒
             # 测试完成后，如需恢复生产模式，将 stocks[:3] 改回 stocks，并将间隔逻辑改回每10个暂停1秒
-            test_stocks = stocks[:3]
-            logger.info(f"测试模式：只处理前 {len(test_stocks)} 个股票，每个间隔5秒")
+            # test_stocks = stocks[:20]
+            # logger.info(f"测试模式：只处理前 {len(test_stocks)} 个股票，每个间隔5秒")
             
-            for i, stock in enumerate(test_stocks):
+            for i, stock in enumerate(stocks):
+                logger.info(f"处理股票: {stock.code} - {stock.name}")
+
                 try:
                     # 测试阶段：每个数据间隔5秒
                     if i > 0:
                         logger.info(f"等待5秒后处理下一个股票... (当前: {i}/{len(test_stocks)})")
-                        time.sleep(5)
                     
                     # 获取历史数据
                     try:
@@ -956,6 +957,7 @@ class MarketDataFetcher:
                         ).order_by('-date')
                         
                         if existing_data.exists():
+                            logger.info(f"有本地数据，检查是否有最新一个月的数据")
                             # 有本地数据，检查是否有最新一个月的数据
                             latest_date = existing_data.first().date
                             current_date = datetime.now().date()
@@ -964,7 +966,7 @@ class MarketDataFetcher:
                             if latest_date.month != current_date.month or latest_date.year != current_date.year:
                                 # 需要更新数据，获取最新数据
                                 # 使用 AKTools HTTP API 接口
-                                
+                                logger.info(f"无最新数据，使用 AKTools HTTP API 接口获取最新数据")
                                 try:
                                     # 构建请求参数
                                     params = {
@@ -976,8 +978,11 @@ class MarketDataFetcher:
                                     }
                                     
                                     # 发送请求到 AKTools API
+                                    # 从环境变量中获取 AKTOOLS_URL
+                                    aktools_url = os.environ.get('AKTOOLS_URL')
+
                                     response = requests.get(
-                                        'http://127.0.0.1:8088/api/public/stock_zh_a_hist',
+                                        f'{aktools_url}/api/public/stock_zh_a_hist',
                                         params=params,
                                         timeout=30
                                     )
@@ -986,6 +991,7 @@ class MarketDataFetcher:
                                     # 解析 JSON 响应
                                     data = response.json()
                                     hist_df = pd.DataFrame(data)
+                                    time.sleep(5)
                                     
                                 except Exception as api_error:
                                     # 如果 AKTools API 失败，回退到原始的 akshare 方法
@@ -997,6 +1003,7 @@ class MarketDataFetcher:
                                         end_date=end_date.strftime(date_format),
                                         adjust="qfq"
                                     )
+                                    time.sleep(5)
                                 
                                 if not hist_df.empty:
                                     # 保存新数据到本地
@@ -1055,8 +1062,12 @@ class MarketDataFetcher:
                                 }
                                 
                                 # 发送请求到 AKTools API
+                                # 从环境变量中获取 AKTOOLS_URL
+                                aktools_url = os.environ.get('AKTOOLS_URL')
+                                
+                                logger.info(f"没有本地数据，使用 AKTools HTTP API 接口获取最新数据")
                                 response = requests.get(
-                                    'http://127.0.0.1:8088/api/public/stock_zh_a_hist',
+                                    f'{aktools_url}/api/public/stock_zh_a_hist',
                                     params=params,
                                     timeout=30
                                 )
@@ -1065,7 +1076,8 @@ class MarketDataFetcher:
                                 # 解析 JSON 响应
                                 data = response.json()
                                 hist_df = pd.DataFrame(data)
-                                
+                                time.sleep(5)
+
                             except Exception as api_error:
                                 # 如果 AKTools API 失败，回退到原始的 akshare 方法
                                 logger.warning(f"AKTools API 请求失败，回退到 akshare: {str(api_error)}")
@@ -1076,7 +1088,8 @@ class MarketDataFetcher:
                                     end_date=end_date.strftime(date_format),
                                     adjust="qfq"
                                 )
-                            
+                                time.sleep(5)
+                                
                             if not hist_df.empty:
                                 # 保存数据到本地
                                 for _, row in hist_df.iterrows():
