@@ -373,7 +373,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     'fetch-bigdata-strategy-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bigdata_strategy_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=30, day_of_week='1-5'),  # 每天19:30执行，仅周一到周五
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=30, day_of_week='5'),  # 每天19:30执行，仅周五
     },
     'fetch-daily-market-data': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',

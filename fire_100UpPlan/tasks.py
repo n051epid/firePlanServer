@@ -32,24 +32,41 @@ def send_notification_email(subject, message, from_email, recipient_list, bcc_li
 
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)  # 最多重试3次，每次间隔60秒
-def fetch_daily_market_data(self, date=None):
+@shared_task(bind=True, max_retries=3, default_retry_delay=3600)  # 最多重试3次，每次间隔3600秒
+def fetch_daily_market_data(self, start_date=None, end_date=None):
     """每日市场数据采集任务"""
-    logger.info(f"Task: Fetching daily market data for date: {date}")
+    """python manage.py shell
+       from fire_100UpPlan.tasks import fetch_daily_market_data
+       result = fetch_daily_market_data('20260112','20260112')
+    """
+    logger.info(f"Task: Fetching daily market data for date: {start_date} to {end_date}")
 
     try:
         # 创建 fetcher 实例并直接调用
         fetcher = MarketDataFetcher()
-        market_data = fetcher.fetch_daily_market_data(date)
-        today = datetime.now().strftime('%Y%m%d')
+        market_data = fetcher.fetch_daily_market_data(start_date, end_date)
 
-        if market_data and market_data.get('status') == 'success':  # 检查 market_data 是否成功
-            logger.info(f"成功获取市场数据 by celery: {today}")
-            return {
-                'status': 'success',
-                'date': today,
-                'message': market_data.get('message', '获取成功')
-            }
+        # 检查 market_data 是否成功或完成
+        if market_data and market_data.get('status') in ['success', 'completed']:
+            if market_data.get('status') == 'completed':
+                # 批量处理完成，返回汇总结果
+                logger.info(f"批量处理完成: {market_data.get('message', '')}")
+                return {
+                    'status': 'success',
+                    'date_range': f"{start_date} - {end_date}",
+                    'total': market_data.get('total', 0),
+                    'success': market_data.get('success', 0),
+                    'failed': market_data.get('failed', 0),
+                    'message': market_data.get('message', '批量处理完成')
+                }
+            else:
+                # 单个日期处理成功
+                logger.info(f"成功获取市场数据 by celery: {start_date} to {end_date}")
+                return {
+                    'status': 'success',
+                    'date_range': f"{start_date} - {end_date}",
+                    'message': market_data.get('message', '获取成功')
+                }
         else:
             error_msg = market_data.get('message', 'Failed to fetch market data') if market_data else 'No market data returned'
             logger.error(f"获取市场数据失败: {error_msg}")
@@ -158,6 +175,10 @@ def fetch_margin_trading_data(self):
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_industry_valuation_data(self, start_date=None, end_date=None):
     """行业估值数据采集任务"""
+    """python manage.py shell
+       from fire_100UpPlan.tasks import fetch_industry_valuation_data
+       result = fetch_industry_valuation_data('20251212','20251212')
+    """
     logger.info(f"Task: Fetching industry valuation data")
     try:
         fetcher = MarketDataFetcher()
