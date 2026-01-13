@@ -11,10 +11,13 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 import os
+import logging
 from pathlib import Path
 from dotenv import load_dotenv
 from celery.schedules import crontab
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # 时区设置
 USE_TZ = True
@@ -348,8 +351,28 @@ CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL')
 CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND')
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
+# Celery 连接和稳定性配置
+CELERY_BROKER_CONNECTION_RETRY = True
+CELERY_BROKER_CONNECTION_MAX_RETRIES = 10
+CELERY_BROKER_POOL_LIMIT = 10
+CELERY_RESULT_BACKEND_ALWAYS_RETRY = True
+CELERY_RESULT_BACKEND_MAX_RETRIES = 10
+
+# Celery Beat 调度器配置
+CELERY_BEAT_MAX_LOOP_INTERVAL = 300  # 最大循环间隔（秒），避免过于频繁的检查
+
 # Celery Beat 定时任务配置
-CELERY_BEAT_HOURS = os.environ.get('CELERY_BEAT_HOURS')
+CELERY_BEAT_HOURS = os.environ.get('CELERY_BEAT_HOURS', '19')  # 默认19点
+# 验证 CELERY_BEAT_HOURS 是否为有效值
+if CELERY_BEAT_HOURS:
+    try:
+        hour_int = int(CELERY_BEAT_HOURS)
+        if not (0 <= hour_int <= 23):
+            raise ValueError(f"CELERY_BEAT_HOURS must be between 0 and 23, got {hour_int}")
+    except ValueError as e:
+        logger.error(f"Invalid CELERY_BEAT_HOURS: {e}")
+        CELERY_BEAT_HOURS = '19'  # 使用默认值
+
 CELERY_BEAT_SCHEDULE = {
     'fetch-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_index_data',
@@ -363,7 +386,7 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'fire_100UpPlan.tasks.fetch_industry_valuation_data',
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=15, day_of_week='1-5'),  # 每天19:15执行，仅周一到周五
     },
-    'fetch_convertible_bond_data': {
+    'fetch-convertible-bond-data': {
         'task': 'fire_100UpPlan.tasks.fetch_convertible_bond_data',
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=20, day_of_week='1-5'),  # 每天19:20执行，仅周一到周五
     },
@@ -384,14 +407,15 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=40, day_of_week='1-5'),  # 每天19:40执行，仅周一到周五
     },
     'generate-daily-article': {
-        'task': 'weixin_offiaccount.tasks.generate_daily_article',
+        # cSpell:ignore weixin
+        'task': 'weixin_offiaccount.tasks.generate_daily_article',  # weixin = 微信 (WeChat)
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=45, day_of_week='sunday'),  # 每周日指定时间执行
     },
     'fetch-daily-market-data2': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
         'schedule': crontab(hour=23, minute=00, day_of_week='1-5'),  # 备份计划，每天23:00执行，仅周一到周五
     },
-    'fetch_convertible_bond_data': {
+    'fetch-convertible-bond-data-announcement': {
         'task': 'fire_100UpPlan.tasks.fetch_convertible_bond_data',
         'schedule': crontab(hour=7, minute=00),  # 公告信息更新，每天7:00执行，周末也执行（公司更新公告）
     }

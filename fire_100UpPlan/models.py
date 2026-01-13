@@ -397,7 +397,7 @@ class FundData(BaseMarketData):
 
 
 class StockHistoryData(BaseMarketData):
-    """股票历史数据"""
+    """股票月度前复权历史数据"""
     close = models.FloatField('收盘价')
     period = models.CharField('周期', max_length=20, default='monthly')  # daily, weekly, monthly
     adjust = models.CharField('复权类型', max_length=10, default='qfq')  # qfq, hfq, none
@@ -409,7 +409,7 @@ class StockHistoryData(BaseMarketData):
             models.Index(fields=['code', 'period', 'adjust']),
             models.Index(fields=['date']),
         ]
-        verbose_name = '股票历史数据'
+        verbose_name = '股票数据-月度'
         verbose_name_plural = verbose_name
 
     def __str__(self):

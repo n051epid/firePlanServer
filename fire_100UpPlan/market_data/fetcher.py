@@ -126,7 +126,7 @@ class MarketDataFetcher:
                 
                 sh_index['date'] = pd.to_datetime(sh_index['date'])
                 
-                # 获取东方财富网-沪深京 A 股-实时行情数据(只能是最新的，无法指定日期)
+                # 获取东方财富网-沪深京 A 股-实时行情数据(只能是最新的，无法指定日期，仅用来计算全市场交易量和交易额)
                 market_data = ak.stock_zh_a_spot_em()
                 total_volume = market_data['成交量'].sum()
                 total_amount = market_data['成交额'].sum()
@@ -693,7 +693,7 @@ class MarketDataFetcher:
 
                             valuation.save()
                     
-                    # 获取东方财富A股数据
+                    # 获取东方财富A股数据（前复权）
                     stock_zh_a_spot_em = ak.stock_zh_a_spot_em()
                     logger.info(f"Fetcher: 从东方财富获取A股数据，总数量: {len(stock_zh_a_spot_em)}")
 
@@ -864,6 +864,90 @@ class MarketDataFetcher:
             return 0
 
     @staticmethod
+    def fetch_and_save_stock_history_data(stock, start_date, end_date, date_format='%Y%m%d'):
+        """获取股票历史数据并保存到数据库
+        
+        Args:
+            stock: StockData 对象
+            start_date: 开始日期 (datetime 对象)
+            end_date: 结束日期 (datetime 对象)
+            date_format: 日期格式字符串，默认为 '%Y%m%d'
+            
+        Returns:
+            hist_df: pandas DataFrame，包含历史数据，如果获取失败返回 None
+        """
+        try:
+            # 构建请求参数
+            params = {
+                'symbol': str(stock.code),
+                'period': 'monthly',
+                'start_date': start_date.strftime(date_format),
+                'end_date': end_date.strftime(date_format),
+                'adjust': 'qfq'
+            }
+            
+            # 发送请求到 AKTools API
+            # 从环境变量中获取 AKTOOLS_URL
+            aktools_url = os.environ.get('AKTOOLS_URL')
+            
+            try:
+                response = requests.get(
+                    f'{aktools_url}/api/public/stock_zh_a_hist',
+                    params=params,
+                    timeout=30
+                )
+                response.raise_for_status()
+                
+                # 解析 JSON 响应
+                data = response.json()
+                hist_df = pd.DataFrame(data)
+                time.sleep(5)
+                
+            except Exception as api_error:
+                # 如果 AKTools API 失败，回退到原始的 akshare 方法
+                logger.warning(f"AKTools API 请求失败，回退到 akshare: {str(api_error)}")
+                hist_df = ak.stock_zh_a_hist(
+                    symbol=str(stock.code),
+                    period="monthly",
+                    start_date=start_date.strftime(date_format),
+                    end_date=end_date.strftime(date_format),
+                    adjust="qfq"
+                )
+                time.sleep(5)
+            
+            if not hist_df.empty:
+                # 保存新数据到本地
+                for _, row in hist_df.iterrows():
+                    # 安全处理日期：如果已经是 date 对象就直接使用，否则转换为 date
+                    row_date = row['日期']
+                    if isinstance(row_date, datetime):
+                        row_date = row_date.date()
+                    elif not isinstance(row_date, date):
+                        # 如果是字符串或其他类型，尝试转换
+                        row_date = pd.to_datetime(row_date).date()
+                    
+                    StockHistoryData.objects.update_or_create(
+                        date=row_date,
+                        code=stock.code,
+                        period="monthly",
+                        adjust="qfq",
+                        defaults={
+                            'name': stock.name,
+                            'close': row['收盘']
+                        }
+                    )
+                
+                logger.info(f"成功保存股票 {stock.code} 的历史数据，共 {len(hist_df)} 条记录")
+                return hist_df
+            else:
+                logger.warning(f"股票 {stock.code} 的历史数据为空")
+                return None
+                
+        except Exception as e:
+            logger.error(f"获取股票 {stock.code} 历史数据时出错: {str(e)}")
+            return None
+
+    @staticmethod
     def fetch_bigdata_strategy_data():
         """获取大数投资策略数据
         
@@ -912,10 +996,7 @@ class MarketDataFetcher:
                 name__iregex=r'.*st.*'
             )
 
-            # 准备日期范围（计算近一年股票涨幅）
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=365)
-            date_format = '%Y%m%d'
+            
 
             # 大数评分：查询行业历史估值数据，为计算大数评分做准备
             industry_history_data = IndustryValuation.objects.filter(
@@ -931,25 +1012,29 @@ class MarketDataFetcher:
 
             # 准备批量更新的数据
             bulk_data = []
-            
+
             # 测试阶段：只处理前3个数据，每个间隔5秒
             # 测试完成后，如需恢复生产模式，将 stocks[:3] 改回 stocks，并将间隔逻辑改回每10个暂停1秒
-            # test_stocks = stocks[:20]
+            # test_stocks = stocks[:25]
             # logger.info(f"测试模式：只处理前 {len(test_stocks)} 个股票，每个间隔5秒")
+
+            # 准备日期范围（计算近一年股票涨幅）
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=365)
+            date_format = '%Y%m%d'
             
             for i, stock in enumerate(stocks):
                 logger.info(f"处理股票: {stock.code} - {stock.name}")
 
                 try:
-                    # 测试阶段：每个数据间隔5秒
+                    # 每个股票处理间隔5秒
                     if i > 0:
-                        logger.info(f"等待5秒后处理下一个股票... (当前: {i}/{len(test_stocks)})")
+                        logger.info(f"等待5秒后处理下一个股票... (当前: {i}/{len(stocks)})")
                     
                     # 获取历史数据
                     try:
                         # 先检查本地是否有该股票的历史数据
                         
-                        # 检查是否有该股票的历史数据
                         existing_data = StockHistoryData.objects.filter(
                             code=stock.code,
                             period="monthly",
@@ -957,159 +1042,57 @@ class MarketDataFetcher:
                         ).order_by('-date')
                         
                         if existing_data.exists():
-                            logger.info(f"有本地数据，检查是否有最新一个月的数据")
-                            # 有本地数据，检查是否有最新一个月的数据
-                            latest_date = existing_data.first().date
-                            current_date = datetime.now().date()
+                            logger.info(f"有本地数据，从StockData中获取最新close数据")
+                            # StockHistoryData中有数据，则从StockData中获取code对应的最新close数据
+                            # 如果close数据和本地最新数据是同一个月，则更新本地数据
+                            # 如果close数据和本地最新数据不是同一个月，则在StockHistoryData中新增一条数据
                             
-                            # 检查是否需要更新数据（如果最新数据不是当前月份）
-                            if latest_date.month != current_date.month or latest_date.year != current_date.year:
-                                # 需要更新数据，获取最新数据
-                                # 使用 AKTools HTTP API 接口
-                                logger.info(f"无最新数据，使用 AKTools HTTP API 接口获取最新数据")
-                                try:
-                                    # 构建请求参数
-                                    params = {
-                                        'symbol': str(stock.code),
-                                        'period': 'monthly',
-                                        'start_date': start_date.strftime(date_format),
-                                        'end_date': end_date.strftime(date_format),
-                                        'adjust': 'qfq'
-                                    }
-                                    
-                                    # 发送请求到 AKTools API
-                                    # 从环境变量中获取 AKTOOLS_URL
-                                    aktools_url = os.environ.get('AKTOOLS_URL')
-
-                                    response = requests.get(
-                                        f'{aktools_url}/api/public/stock_zh_a_hist',
-                                        params=params,
-                                        timeout=30
-                                    )
-                                    response.raise_for_status()
-                                    
-                                    # 解析 JSON 响应
-                                    data = response.json()
-                                    hist_df = pd.DataFrame(data)
-                                    time.sleep(5)
-                                    
-                                except Exception as api_error:
-                                    # 如果 AKTools API 失败，回退到原始的 akshare 方法
-                                    logger.warning(f"AKTools API 请求失败，回退到 akshare: {str(api_error)}")
-                                    hist_df = ak.stock_zh_a_hist(
-                                        symbol=str(stock.code),
-                                        period="monthly",
-                                        start_date=start_date.strftime(date_format),
-                                        end_date=end_date.strftime(date_format),
-                                        adjust="qfq"
-                                    )
-                                    time.sleep(5)
-                                
-                                if not hist_df.empty:
-                                    # 保存新数据到本地
-                                    for _, row in hist_df.iterrows():
-                                        # 安全处理日期：如果已经是 date 对象就直接使用，否则转换为 date
-                                        row_date = row['日期']
-                                        if isinstance(row_date, datetime):
-                                            row_date = row_date.date()
-                                        elif not isinstance(row_date, date):
-                                            # 如果是字符串或其他类型，尝试转换
-                                            row_date = pd.to_datetime(row_date).date()
-                                        
-                                        StockHistoryData.objects.update_or_create(
-                                            date=row_date,
-                                            code=stock.code,
-                                            period="monthly",
-                                            adjust="qfq",
-                                            defaults={
-                                                'name': stock.name,
-                                                'close': row['收盘']
-                                            }
-                                        )
-                                    
-                                    # 重新获取本地数据用于计算
-                                    local_data = StockHistoryData.objects.filter(
-                                        code=stock.code,
-                                        period="monthly",
-                                        adjust="qfq"
-                                    ).order_by('date')
-                                    
-                                    # 计算近一年最低点涨幅
-                                    one_year_min = local_data.aggregate(min_close=Min('close'))['min_close']
-                                    one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
-                                else:
-                                    # 使用本地数据计算
-                                    local_data = existing_data.order_by('date')
-                                    one_year_min = local_data.aggregate(min_close=Min('close'))['min_close']
-                                    one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
+                            # 获取 StockHistoryData 中的最新数据
+                            latest_history = existing_data.first()
+                            latest_history_date = latest_history.date
+                            
+                            # stock 对象已经包含了最新的 StockData 数据（因为查询时只返回最近一个交易日的数据）
+                            stock_date = stock.date
+                            
+                            # 比较两个日期的月份和年份
+                            if (stock_date.year == latest_history_date.year and 
+                                stock_date.month == latest_history_date.month):
+                                # 如果是同一个月，更新 StockHistoryData 中的 close 数据
+                                logger.info(f"StockData 和 StockHistoryData 最新数据是同一个月 ({stock_date.strftime('%Y-%m')})，更新 close 数据: {stock.close}")
+                                latest_history.close = stock.close
+                                latest_history.save()
                             else:
-                                # 使用本地数据计算
-                                local_data = existing_data.order_by('date')
-                                one_year_min = local_data.aggregate(min_close=Min('close'))['min_close']
-                                one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
+                                # 如果不是同一个月，在 StockHistoryData 中新增一条数据
+                                logger.info(f"StockData 和 StockHistoryData 最新数据不是同一个月 (StockData: {stock_date.strftime('%Y-%m')}, History: {latest_history_date.strftime('%Y-%m')})，新增一条数据")
+                                StockHistoryData.objects.update_or_create(
+                                    date=stock_date,
+                                    code=stock.code,
+                                    period="monthly",
+                                    adjust="qfq",
+                                    defaults={
+                                        'name': stock.name,
+                                        'close': stock.close
+                                    }
+                                )
+                            
+                            # 重新获取本地数据用于计算
+                            local_data = StockHistoryData.objects.filter(
+                                code=stock.code,
+                                period="monthly",
+                                adjust="qfq"
+                            ).order_by('date')
+                            
+                            # 计算近一年最低点涨幅
+                            one_year_min = local_data.aggregate(min_close=Min('close'))['min_close']
+                            one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
                         else:
                             # 没有本地数据，从网络获取并保存
-                            # 使用 AKTools HTTP API 接口
-                            
-                            try:
-                                # 构建请求参数
-                                params = {
-                                    'symbol': str(stock.code),
-                                    'period': 'monthly',
-                                    'start_date': start_date.strftime(date_format),
-                                    'end_date': end_date.strftime(date_format),
-                                    'adjust': 'qfq'
-                                }
+                            logger.info(f"没有本地数据，获取最新数据")
+                            hist_df = MarketDataFetcher.fetch_and_save_stock_history_data(
+                                stock, start_date, end_date, date_format
+                            )
                                 
-                                # 发送请求到 AKTools API
-                                # 从环境变量中获取 AKTOOLS_URL
-                                aktools_url = os.environ.get('AKTOOLS_URL')
-                                
-                                logger.info(f"没有本地数据，使用 AKTools HTTP API 接口获取最新数据")
-                                response = requests.get(
-                                    f'{aktools_url}/api/public/stock_zh_a_hist',
-                                    params=params,
-                                    timeout=30
-                                )
-                                response.raise_for_status()
-                                
-                                # 解析 JSON 响应
-                                data = response.json()
-                                hist_df = pd.DataFrame(data)
-                                time.sleep(5)
-
-                            except Exception as api_error:
-                                # 如果 AKTools API 失败，回退到原始的 akshare 方法
-                                logger.warning(f"AKTools API 请求失败，回退到 akshare: {str(api_error)}")
-                                hist_df = ak.stock_zh_a_hist(
-                                    symbol=str(stock.code),
-                                    period="monthly",
-                                    start_date=start_date.strftime(date_format),
-                                    end_date=end_date.strftime(date_format),
-                                    adjust="qfq"
-                                )
-                                time.sleep(5)
-                                
-                            if not hist_df.empty:
-                                # 保存数据到本地
-                                for _, row in hist_df.iterrows():
-                                    # 安全处理日期：如果已经是 date 对象就直接使用，否则转换为 date
-                                    row_date = row['日期']
-                                    if isinstance(row_date, datetime):
-                                        row_date = row_date.date()
-                                    elif not isinstance(row_date, date):
-                                        # 如果是字符串或其他类型，尝试转换
-                                        row_date = pd.to_datetime(row_date).date()
-                                    
-                                    StockHistoryData.objects.create(
-                                        date=row_date,
-                                        code=stock.code,
-                                        name=stock.name,
-                                        period="monthly",
-                                        adjust="qfq",
-                                        close=row['收盘']
-                                    )
-                                
+                            if hist_df is not None and not hist_df.empty:
                                 # 计算近一年最低点涨幅
                                 one_year_min = hist_df['收盘'].min()
                                 one_year_increase = (stock.close - one_year_min) / one_year_min * 100
