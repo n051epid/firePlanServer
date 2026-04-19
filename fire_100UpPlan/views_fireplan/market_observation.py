@@ -23,6 +23,166 @@ from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
 
+import threading
+import os
+import requests
+
+# ========================================
+# Proxy + AKTools 系统 (from fetcher.py)
+# ========================================
+
+_proxy_manager_instance = None
+_proxy_manager_lock = threading.Lock()
+
+class ProxyManager:
+    """
+    轻量级代理管理器
+    - 支持 HTTP/HTTPS 代理
+    - 支持认证代理 (user:pass@host:port)
+    - 多代理轮询负载均衡
+    - 自动故障转移
+    """
+    
+    def __init__(self, proxy_urls):
+        self._proxies = proxy_urls
+        self._current_index = 0
+        self._failed_proxies = set()
+        self._stats = {p: {'success': 0, 'fail': 0, 'consecutive_fails': 0} for p in proxy_urls}
+        self._lock = threading.Lock()
+        self._direct_mode = False
+        
+        # 保存原始 requests 方法
+        self._original_get = requests.get
+        self._original_post = requests.post
+        
+        import logging
+        logging.getLogger(__name__).info(f"ProxyManager: 初始化完成，代理数量: {len(proxy_urls)}")
+    
+    def get_proxy(self):
+        """获取下一个可用代理"""
+        with self._lock:
+            if self._direct_mode or not self._proxies:
+                return None
+            
+            available = [p for p in self._proxies if p not in self._failed_proxies]
+            if not available:
+                import logging
+                logging.getLogger(__name__).warning("ProxyManager: 所有代理失效，回退到直连模式")
+                self._direct_mode = True
+                return None
+            
+            proxy = available[self._current_index % len(available)]
+            self._current_index += 1
+            proxy_https = proxy.replace('http://', 'https://')
+            return {'http': proxy, 'https': proxy_https}
+    
+    def mark_success(self, proxy_url):
+        """标记请求成功"""
+        with self._lock:
+            if proxy_url in self._stats:
+                self._stats[proxy_url]['success'] += 1
+                self._stats[proxy_url]['consecutive_fails'] = 0
+                if proxy_url in self._failed_proxies:
+                    self._failed_proxies.discard(proxy_url)
+    
+    def mark_fail(self, proxy_url):
+        """标记请求失败"""
+        with self._lock:
+            if proxy_url in self._stats:
+                self._stats[proxy_url]['fail'] += 1
+                self._stats[proxy_url]['consecutive_fails'] += 1
+                if self._stats[proxy_url]['consecutive_fails'] >= 3:
+                    self._failed_proxies.add(proxy_url)
+
+
+def _get_proxy_manager():
+    """获取或初始化代理管理器单例"""
+    global _proxy_manager_instance
+    
+    if _proxy_manager_instance is not None:
+        return _proxy_manager_instance
+    
+    with _proxy_manager_lock:
+        if _proxy_manager_instance is not None:
+            return _proxy_manager_instance
+        
+        proxy_list_env = os.environ.get('PROXY_LIST', '')
+        
+        if not proxy_list_env:
+            _proxy_manager_instance = None
+            return None
+        
+        proxy_urls = [p.strip() for p in proxy_list_env.split(',') if p.strip()]
+        
+        if not proxy_urls:
+            _proxy_manager_instance = None
+            return None
+        
+        _proxy_manager_instance = ProxyManager(proxy_urls)
+        return _proxy_manager_instance
+
+
+def _get_aktools_url():
+    """获取 AKTools URL"""
+    return os.environ.get('AKTOOLS_URL')
+
+
+def _aktools_stock_zh_index_daily(symbol):
+    """AKTools 指数日线接口"""
+    import pandas as pd
+    aktools_url = _get_aktools_url()
+    if not aktools_url:
+        return None
+    params = {'symbol': symbol}
+    try:
+        resp = requests.get(f'{aktools_url}/api/public/stock_zh_index_daily', params=params, timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        df = pd.DataFrame(data)
+        return df
+    except:
+        return None
+
+
+def ak_with_fallback(ak_func, *args, aktools_func=None, **kwargs):
+    """
+    带有 AKTools 和代理回退的 akshare 调用封装
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    aktools_url = _get_aktools_url()
+    proxy_mgr = _get_proxy_manager()
+    
+    # 尝试 1: AKTools
+    if aktools_url and aktools_func:
+        try:
+            logger.info(f"AKTools: 尝试调用 {aktools_func.__name__}")
+            result = aktools_func(*args, **kwargs)
+            if result is not None and not (hasattr(result, 'empty') and result.empty):
+                logger.info(f"AKTools: 成功获取数据")
+                return result
+            else:
+                logger.warning(f"AKTools: 返回数据为空，尝试下一方案")
+        except Exception as e:
+            logger.warning(f"AKTools: 调用失败，尝试下一方案: {e}")
+    
+    # 尝试 2: 代理
+    if proxy_mgr:
+        try:
+            logger.info(f"ProxyManager: 通过代理调用 {ak_func.__name__}")
+            result = ak_func(*args, **kwargs)
+            return result
+        except Exception as e:
+            logger.warning(f"代理模式失败，尝试直连: {e}")
+    
+    # 尝试 3: 直连
+    logger.info(f"直连模式调用 {ak_func.__name__}")
+    result = ak_func(*args, **kwargs)
+    return result
+
+
+
 logger = logging.getLogger(__name__)
 
 class MarketValuationView(APIView):
@@ -343,7 +503,7 @@ class MarketTrendView(APIView):
         
         result = {}
         for code, name in indices.items():
-            df = ak.stock_zh_index_daily(symbol=code)
+            df = ak_with_fallback(ak.stock_zh_index_daily, symbol=code, aktools_func=_aktools_stock_zh_index_daily)
             latest = df.iloc[-1]
             
             result[name] = {
@@ -387,7 +547,7 @@ class MarketTrendView(APIView):
             
             result = {}
             for code, name in styles.items():
-                df = ak.stock_zh_index_daily(symbol=code)
+                df = ak_with_fallback(ak.stock_zh_index_daily, symbol=code, aktools_func=_aktools_stock_zh_index_daily)
                 latest = df.iloc[-1]
                 
                 result[name] = {
