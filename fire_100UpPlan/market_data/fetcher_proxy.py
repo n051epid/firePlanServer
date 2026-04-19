@@ -92,11 +92,15 @@ class ProxyManager:
             
             # 确定代理协议
             scheme = parsed.scheme.lower()
-            if scheme not in ('http', 'https'):
+            if scheme not in ('http', 'https', 'socks5', 'socks5h', 'socks', 'socks4'):
                 logger.warning(f"ProxyManager: 不支持的代理协议 {scheme}")
                 return None
             
-            # 构建代理字典
+            # SOCKS 代理直接返回（requests 会自动处理）
+            if scheme.startswith('socks'):
+                return {'http': url, 'https': url}
+            
+            # HTTP(S) 代理
             proxy_dict = {
                 'http': url,
                 'https': url.replace('http://', 'https://') if scheme == 'http' else url
