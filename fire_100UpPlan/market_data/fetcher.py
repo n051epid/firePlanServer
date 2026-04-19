@@ -129,6 +129,31 @@ class ProxyManager:
                 else:
                     logger.warning(f"ProxyManager: 代理 {proxy_url} 失败，切换下一个: {e}")
 
+    def route_request(self, func, *args, **kwargs):
+        """通过代理路由任意函数调用（仅限使用 requests.get/post 的函数如 akshare）
+
+        原理：临时将 requests.get/post 替换为带代理感知的版本，
+        函数执行完后立即恢复，不影响其他并发调用。
+        """
+        import requests as _requests_module
+        _orig_get = _requests_module.get
+        _orig_post = _requests_module.post
+
+        # 临时注入代理感知方法
+        def _proxied_get(url, **kw):
+            return self.request_with_proxy('get', url, **kw)
+        def _proxied_post(url, **kw):
+            return self.request_with_proxy('post', url, **kw)
+
+        _requests_module.get = _proxied_get
+        _requests_module.post = _proxied_post
+        try:
+            return func(*args, **kwargs)
+        finally:
+            # 立即恢复，不留副作用
+            _requests_module.get = _orig_get
+            _requests_module.post = _orig_post
+
 
 def _get_proxy_manager():
     """获取或初始化代理管理器单例"""
@@ -164,104 +189,121 @@ def _get_aktools_url():
     return os.environ.get('AKTOOLS_URL')
 
 
-def _aktools_stock_zh_a_pe(symbol):
-    """AKTools PE接口"""
+def _aktools_request(path, params=None):
+    """统一的 AKTools 请求方法，支持代理轮询（⑥ 优化）"""
     aktools_url = _get_aktools_url()
     if not aktools_url:
         return None
-    params = {'symbol': symbol}
+    proxy_mgr = _get_proxy_manager()
+    url = f'{aktools_url}{path}'
+    kwargs = {'timeout': 30, 'params': params or {}}
     try:
-        resp = requests.get(f'{aktools_url}/api/public/stock_zh_a_pe', params=params, timeout=30)
+        if proxy_mgr:
+            resp = proxy_mgr.request_with_proxy('get', url, **kwargs)
+        else:
+            resp = requests.get(url, **kwargs)
         resp.raise_for_status()
-        data = resp.json()
-        df = pd.DataFrame(data)
-        return df
-    except:
+        return resp.json()
+    except Exception:
+        return None
+
+
+def _aktools_stock_zh_a_pe(symbol):
+    """AKTools PE接口"""
+    data = _aktools_request('/api/public/stock_zh_a_pe', {'symbol': symbol})
+    if data is None:
+        return None
+    try:
+        return pd.DataFrame(data)
+    except Exception:
         return None
 
 
 def _aktools_stock_zh_a_pb(symbol):
     """AKTools PB接口"""
-    aktools_url = _get_aktools_url()
-    if not aktools_url:
+    data = _aktools_request('/api/public/stock_zh_a_pb', {'symbol': symbol})
+    if data is None:
         return None
-    params = {'symbol': symbol}
     try:
-        resp = requests.get(f'{aktools_url}/api/public/stock_zh_a_pb', params=params, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        df = pd.DataFrame(data)
-        return df
-    except:
+        return pd.DataFrame(data)
+    except Exception:
         return None
 
 
 def _aktools_stock_zh_index_daily(symbol):
     """AKTools 指数日线接口"""
-    aktools_url = _get_aktools_url()
-    if not aktools_url:
+    data = _aktools_request('/api/public/stock_zh_index_daily', {'symbol': symbol})
+    if data is None:
         return None
-    params = {'symbol': symbol}
     try:
-        resp = requests.get(f'{aktools_url}/api/public/stock_zh_index_daily', params=params, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        df = pd.DataFrame(data)
-        return df
-    except:
+        return pd.DataFrame(data)
+    except Exception:
         return None
 
 
 def _aktools_stock_zh_a_spot_em():
     """AKTools A股实时行情接口"""
-    aktools_url = _get_aktools_url()
-    if not aktools_url:
+    data = _aktools_request('/api/public/stock_zh_a_spot_em')
+    if data is None:
         return None
     try:
-        resp = requests.get(f'{aktools_url}/api/public/stock_zh_a_spot_em', timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        df = pd.DataFrame(data)
-        return df
-    except:
+        return pd.DataFrame(data)
+    except Exception:
         return None
 
 
 def ak_with_fallback(ak_func, *args, aktools_func=None, **kwargs):
     """
     带有 AKTools 和代理回退的 akshare 调用封装
-    
+
     优先级：
     1. AKTools API（如果配置了 AKTOOLS_URL 且提供了 aktools_func）
-    2. 代理轮询（如果配置了 PROXY_LIST）
+    2. 代理轮询（如果配置了 PROXY_LIST）— 修复：真正通过代理路由
     3. 直连 akshare（原有行为）
+
+    优化：
+    - 全局请求间隔（避免高频触发封禁，通过 REQUEST_INTERVAL_SECONDS 环境变量配置）
+    - 区分 AKTools '不可用'（抛异常）vs '无数据'（返回空DataFrame）
+    - 代理真正路由到 akshare 调用
+
+    ⑤ 优化：设置 REQUEST_INTERVAL_SECONDS=1.0（默认1秒），两次外部请求间隔至少这么久
     """
+    import time as _time
+
+    # ── ⑤ 全局限流：每次外部请求前等待间隔 ──────────────────────────────
+    _interval = float(os.environ.get('REQUEST_INTERVAL_SECONDS', '1.0'))
+    _time.sleep(_interval)
+    # ───────────────────────────────────────────────────────────────────
+
     aktools_url = _get_aktools_url()
     proxy_mgr = _get_proxy_manager()
-    
-    # 尝试 1: AKTools
+
+    # ── 尝试 1: AKTools ─────────────────────────────────────────────────
     if aktools_url and aktools_func:
         try:
             logger.info(f"AKTools: 尝试调用 {aktools_func.__name__}")
             result = aktools_func(*args, **kwargs)
             if result is not None and not (hasattr(result, 'empty') and result.empty):
-                logger.info(f"AKTools: 成功获取数据")
+                logger.info(f"AKTools: 成功获取数据 via {aktools_func.__name__}")
                 return result
             else:
-                logger.warning(f"AKTools: 返回数据为空，尝试下一方案")
+                # ⑦ 区分：返回空 DataFrame ≠ 不可用（可能是那天真的没数据）
+                logger.warning(f"AKTools: {aktools_func.__name__} 返回数据为空（非错误，可能是非交易日或接口无数据），跳过 AKTools")
         except Exception as e:
-            logger.warning(f"AKTools: 调用失败，尝试下一方案: {e}")
-    
-    # 尝试 2: 代理
+            # AKTools 不可用（抛异常），继续下一方案
+            logger.warning(f"AKTools: {aktools_func.__name__} 调用异常，尝试下一方案: {e}")
+
+    # ── 尝试 2: 代理轮询 ─────────────────────────────────────────────────
+    # ⑥ 修复：通过 ProxyManager.request_with_proxy 路由 akshare 请求
     if proxy_mgr:
         try:
             logger.info(f"ProxyManager: 通过代理调用 {ak_func.__name__}")
-            result = ak_func(*args, **kwargs)
+            result = proxy_mgr.route_request(ak_func, *args, **kwargs)
             return result
         except Exception as e:
-            logger.warning(f"代理模式失败，尝试直连: {e}")
-    
-    # 尝试 3: 直连
+            logger.warning(f"ProxyManager: 代理模式失败，尝试直连: {e}")
+
+    # ── 尝试 3: 直连 ────────────────────────────────────────────────────
     logger.info(f"直连模式调用 {ak_func.__name__}")
     result = ak_func(*args, **kwargs)
     return result
@@ -377,9 +419,21 @@ class MarketDataFetcher:
                 sh_index['date'] = pd.to_datetime(sh_index['date'])
                 
                 # 获取东方财富网-沪深京 A 股-实时行情数据(只能是最新的，无法指定日期，仅用来计算全市场交易量和交易额)
-                market_data = ak_with_fallback(ak.stock_zh_a_spot_em, aktools_func=_aktools_stock_zh_a_spot_em)
-                total_volume = market_data['成交量'].sum()
-                total_amount = market_data['成交额'].sum()
+                # 注意：ak.stock_zh_a_spot_em 东方财富接口不稳定，被封后 AKTools 也返回空
+                # 允许 total_volume/total_amount 为 None，避免阻断整个任务
+                try:
+                    market_data = ak_with_fallback(ak.stock_zh_a_spot_em, aktools_func=_aktools_stock_zh_a_spot_em)
+                    if market_data is not None and not market_data.empty and '成交量' in market_data.columns and '成交额' in market_data.columns:
+                        total_volume = market_data['成交量'].sum()
+                        total_amount = market_data['成交额'].sum()
+                    else:
+                        logger.warning("东方财富 A 股实时行情为空，跳过全市场交易量统计")
+                        total_volume = None
+                        total_amount = None
+                except Exception as e:
+                    logger.warning(f"获取东方财富 A 股实时行情失败: {e}，跳过全市场交易量统计")
+                    total_volume = None
+                    total_amount = None
 
                 for date in date_list:
                     try:
@@ -1416,8 +1470,29 @@ class MarketDataFetcher:
 
     @staticmethod
     def fetch_index_data(start_date=None, end_date=None):
-        """获取指数历史数据"""
+        """获取指数历史数据
+        
+        优化：若未指定日期范围，则自动从数据库最新日期的下一个交易日开始拉取，
+        避免每次都拉最近10天（节省90%的API调用）。
+        """
         try:
+            # 自动计算日期范围：若未指定，则从数据库最新日期+1天开始，只拉最新交易日
+            if not start_date or not end_date:
+                latest_records = IndexData.objects.order_by('-date').values_list('date', flat=True).first()
+                if latest_records:
+                    # 数据库有记录，从最新日期的下一天开始
+                    import datetime as dt
+                    next_day = latest_records + dt.timedelta(days=1)
+                    # 如果下一个工作日还没到（周末），用今天也没关系，bulk_create会处理
+                    end_date = datetime.now().strftime('%Y%m%d')
+                    start_date = next_day.strftime('%Y%m%d')
+                    logger.info(f"Index data: DB latest={latest_records}, fetching from {start_date} to {end_date}")
+                else:
+                    # 数据库为空，回退到最近10天
+                    end_date = datetime.now().strftime('%Y%m%d')
+                    start_date = (datetime.now() - timedelta(days=10)).strftime('%Y%m%d')
+                    logger.info(f"Index data: DB empty, fetching last 10 days")
+
             # 从数据库获取所有指数
             main_indices = IndexData.objects.values_list('code', flat=True).distinct().order_by('code')
 

@@ -2,6 +2,7 @@ import logging
 from celery import shared_task
 from django.core.mail import EmailMessage
 from .market_data.fetcher import MarketDataFetcher, ConvertibleBondMarketDataFetcher, RefreshDatabaseCache
+from .models import IndustryValuation
 from celery.exceptions import MaxRetriesExceededError
 from datetime import datetime, timedelta
 
@@ -83,24 +84,21 @@ def fetch_daily_market_data(self, start_date=None, end_date=None):
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_index_data(self):
-    """指数数据采集任务"""
+    """指数数据采集任务
+    
+    优化：fetcher 内部自动从 DB 最新日期的下一个交易日开始拉取，
+    避免每次都拉最近10天（节省90%的API调用）。
+    """
     logger.info(f"Task: Fetching index data")
     try:
-        # 自动计算日期范围（比如获取最近10个交易日的数据）
-        end_date = datetime.now().strftime('%Y%m%d')
-        start_date = (datetime.now() - timedelta(days=10)).strftime('%Y%m%d')
-        
         fetcher = MarketDataFetcher()
-        result = fetcher.fetch_index_data(    
-            start_date=start_date,
-            end_date=end_date
-        )
+        result = fetcher.fetch_index_data()  # 不传日期，由 fetcher 内部自动判断
 
         if result:
             logger.info(f"指数数据获取成功")
             return {
                 'status': 'success',
-                'date_range': f"{start_date} - {end_date}"
+                'message': result.get('message', '')
             }
         
         try:
@@ -202,10 +200,17 @@ def fetch_industry_valuation_data(self, start_date=None, end_date=None):
         
         success_count = 0
         fail_count = 0
-        
+        skip_count = 0
+
         # 遍历日期范围获取数据
         for date in date_list:
             try:
+                # 优化：先查数据库是否已有当天数据，避免重复下载 CSI zip 和重复写入
+                date_formatted = datetime.strptime(date, '%Y%m%d').date()
+                if IndustryValuation.objects.filter(date=date_formatted).exists():
+                    logger.info(f"行业估值数据 {date} 已存在，跳过")
+                    skip_count += 1
+                    continue
                 result = fetcher.fetch_industry_valuation(date)
                 if result:
                     logger.info(f"行业估值数据获取成功: {date}")
@@ -216,10 +221,10 @@ def fetch_industry_valuation_data(self, start_date=None, end_date=None):
             except Exception as e:
                 logger.error(f"处理日期 {date} 时出错: {str(e)}")
                 fail_count += 1
-        
+
         return {
             'status': 'success',
-            'message': f'处理完成: 成功 {success_count} 天, 失败 {fail_count} 天',
+            'message': f'处理完成: 成功 {success_count} 天, 失败 {fail_count} 天, 跳过 {skip_count} 天',
             'date_range': f"{start_date.strftime('%Y%m%d')} - {end_date.strftime('%Y%m%d')}"
         }
         

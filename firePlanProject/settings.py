@@ -396,7 +396,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     'fetch-bigdata-strategy-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bigdata_strategy_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=30, day_of_week='5'),  # 每天19:30执行，仅周五
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=30, day_of_week='1-5'),  # 每天19:30执行，仅周一到周五
     },
     'fetch-daily-market-data': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
@@ -405,11 +405,6 @@ CELERY_BEAT_SCHEDULE = {
     'refresh-database-cache': {
         'task': 'fire_100UpPlan.tasks.refresh_database_cache',
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=40, day_of_week='1-5'),  # 每天19:40执行，仅周一到周五
-    },
-    'generate-daily-article': {
-        # cSpell:ignore weixin
-        'task': 'weixin_offiaccount.tasks.generate_daily_article',  # weixin = 微信 (WeChat)
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=45, day_of_week='sunday'),  # 每周日指定时间执行
     },
     'fetch-daily-market-data2': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
