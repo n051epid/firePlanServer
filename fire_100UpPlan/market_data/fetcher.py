@@ -227,19 +227,76 @@ def _aktools_stock_zh_a_spot_em():
         return None
 
 
+def _route_via_proxy(proxy_mgr, func, *args, **kwargs):
+    """
+    通过代理路由请求 - 临时替换 requests.get/post，调用结束后恢复
+    这是让 akshare 走代理的唯一方法（akshare 内部使用 requests.get/post）
+    """
+    import requests as _requests_module
+    _orig_get = _requests_module.get
+    _orig_post = _requests_module.post
+
+    def _proxied_get(url, **kw):
+        proxy = proxy_mgr.get_proxy()
+        proxy_url = proxy['http'] if proxy else None
+        try:
+            if proxy:
+                kw['proxies'] = proxy
+            response = _orig_get(url, **kw)
+            if proxy_url:
+                proxy_mgr.mark_success(proxy_url)
+            return response
+        except Exception as e:
+            if proxy_url:
+                proxy_mgr.mark_fail(proxy_url)
+            raise
+
+    def _proxied_post(url, **kw):
+        proxy = proxy_mgr.get_proxy()
+        proxy_url = proxy['http'] if proxy else None
+        try:
+            if proxy:
+                kw['proxies'] = proxy
+            response = _orig_post(url, **kw)
+            if proxy_url:
+                proxy_mgr.mark_success(proxy_url)
+            return response
+        except Exception as e:
+            if proxy_url:
+                proxy_mgr.mark_fail(proxy_url)
+            raise
+
+    _requests_module.get = _proxied_get
+    _requests_module.post = _proxied_post
+    try:
+        return func(*args, **kwargs)
+    finally:
+        _requests_module.get = _orig_get
+        _requests_module.post = _orig_post
+
+
 def ak_with_fallback(ak_func, *args, aktools_func=None, **kwargs):
     """
-    带有 AKTools 和代理回退的 akshare 调用封装
-    
+    带有代理和 AKTools 回退的 akshare 调用封装
+
     优先级：
-    1. AKTools API（如果配置了 AKTOOLS_URL 且提供了 aktools_func）
-    2. 代理轮询（如果配置了 PROXY_LIST）
+    1. 代理轮询（如果配置了 PROXY_LIST）— 优先使用 SSH relay 等本地代理
+    2. AKTools API（如果配置了 AKTOOLS_URL 且提供了 aktools_func）
     3. 直连 akshare（原有行为）
     """
     aktools_url = _get_aktools_url()
     proxy_mgr = _get_proxy_manager()
-    
-    # 尝试 1: AKTools
+
+    # 尝试 1: 代理
+    if proxy_mgr:
+        try:
+            logger.info(f"ProxyManager: 通过代理调用 {ak_func.__name__}")
+            result = _route_via_proxy(proxy_mgr, ak_func, *args, **kwargs)
+            return result
+        except Exception as e:
+            logger.warning(f"代理模式失败，尝试下一方案: {e}")
+
+    # 尝试 2: AKTools
     if aktools_url and aktools_func:
         try:
             logger.info(f"AKTools: 尝试调用 {aktools_func.__name__}")
@@ -251,16 +308,7 @@ def ak_with_fallback(ak_func, *args, aktools_func=None, **kwargs):
                 logger.warning(f"AKTools: 返回数据为空，尝试下一方案")
         except Exception as e:
             logger.warning(f"AKTools: 调用失败，尝试下一方案: {e}")
-    
-    # 尝试 2: 代理
-    if proxy_mgr:
-        try:
-            logger.info(f"ProxyManager: 通过代理调用 {ak_func.__name__}")
-            result = ak_func(*args, **kwargs)
-            return result
-        except Exception as e:
-            logger.warning(f"代理模式失败，尝试直连: {e}")
-    
+
     # 尝试 3: 直连
     logger.info(f"直连模式调用 {ak_func.__name__}")
     result = ak_func(*args, **kwargs)
