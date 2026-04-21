@@ -1,6 +1,7 @@
 from rest_framework import viewsets, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from .models import Membership, MembershipType
 from .serializers import MembershipSerializer
 from rest_framework.permissions import IsAuthenticated
@@ -124,6 +125,7 @@ class UserLogoutView(APIView):
 class RegisterView(APIView):
     authentication_classes = []  # 禁用认证
     permission_classes = []  # 禁用限检查
+    throttle_classes = [AnonRateThrottle]
 
     def post(self, request):
         username = request.data.get('username')

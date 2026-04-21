@@ -191,12 +191,32 @@ PAYPAL_API_BASE = PAYPAL_ENDPOINTS[PAYPAL_MODE]
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Production detection: use PostgreSQL if DATABASE_URL is set or SERVER_MODE is 'release'
+# For development (testing), fallback to SQLite
+import dj_database_url
+
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    # Production: Use DATABASE_URL (PostgreSQL, MySQL, etc.)
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
     }
-}
+    # Ensure the ENGINE is set correctly for PostgreSQL
+    DATABASES['default']['ENGINE'] = 'django.db.backends.postgresql'
+else:
+    # Development: Use SQLite (default)
+    if SERVER_MODE == 'release':
+        logger.warning(
+            "SERVER_MODE is 'release' but DATABASE_URL is not set. "
+            "Falling back to SQLite. Set DATABASE_URL for production!"
+        )
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
