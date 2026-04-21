@@ -530,7 +530,7 @@ class MarketValuationSyncView(APIView):
 
             # 构建今日财经新闻
             content_news = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 今日财经新闻</h3>
-<p>{generate_news_content('news').replace('\n', '<br>')}</p>"""
+            <p>{_news_raw}</p>"""
             
             # 构建可转债市场概况
             content_cb_market_overview = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 可转债市场概况</h3>
@@ -915,7 +915,7 @@ class MarketValuationSyncView2(APIView):
 
             # 构建今日财经新闻
             content_news = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 今日财经新闻</h3>
-<p>{generate_news_content('news').replace('\n', '<br>')}</p>"""
+            <p>{_news_raw}</p>"""
             
             
 

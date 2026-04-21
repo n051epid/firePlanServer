@@ -22,8 +22,8 @@ from django.http import HttpResponse
 import json
 from django.http import JsonResponse
 import logging
-from django.db import IntegrityError, ValidationError
-from django.core.exceptions import ObjectDoesNotExist
+from django.db import IntegrityError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.urls import reverse
