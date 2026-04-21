@@ -59,7 +59,7 @@ ALLOWED_HOSTS_LIST = {
 ALLOWED_HOST = ALLOWED_HOSTS_LIST[os.environ.get('SERVER_MODE')]
 
 
-ALLOWED_HOSTS = [ALLOWED_HOST, 'localhost', '127.0.0.1','47.95.170.152']
+ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', f'{ALLOWED_HOST},localhost,127.0.0.1').split(',') if h.strip()]
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
