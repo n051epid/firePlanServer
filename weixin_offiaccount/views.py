@@ -20,7 +20,7 @@ import random
 import string
 from fire_100UpPlan.models import Membership, MembershipType
 from fire_100UpPlan.views_fireplan.market_observation import MarketValuationView,ConvertibleBondMarketDataView
-from .utils import wechat_token_qinglv, wechat_token_black13eard, sync_to_wechat_draft
+from .utils import wechat_token_qinglv, wechat_token_black13eard, sync_to_wechat_draft, error_response
 from datetime import datetime
 import html
 from django.http import StreamingHttpResponse
@@ -111,10 +111,7 @@ class KimiChatView(APIView):
             messages = request.data.get("messages", [])
             
             if not messages:
-                return Response(
-                    {"error": "Messages are required"}, 
-                    status=400
-                )
+                return error_response(1, "Messages are required")
 
             # 获取生成的内容
             content = ""
@@ -126,7 +123,7 @@ class KimiChatView(APIView):
             
         except Exception as e:
             logger.error(f"Error in KimiChatView: {str(e)}")
-            return Response({"error": "Internal server error"}, status=500)
+            return error_response(1, "Internal server error", 500)
         
 
 class WeChatAPIView(APIView):
@@ -532,8 +529,9 @@ class MarketValuationSyncView(APIView):
             head_content = f"""<header style="background-image: url({head_img_url_covertablebonds}); background-size: cover; background-position: center; height: 400px;"></header>"""
 
             # 构建今日财经新闻
+            _news_raw = generate_news_content('news').replace('\n', '<br>')
             content_news = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 今日财经新闻</h3>
-<p>{generate_news_content('news').replace('\n', '<br>')}</p>"""
+            <p>{_news_raw}</p>"""
             
             # 构建可转债市场概况
             content_cb_market_overview = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 可转债市场概况</h3>
@@ -917,8 +915,9 @@ class MarketValuationSyncView2(APIView):
             head_content = f"""<header style="background-image: url({head_img_url}); background-size: cover; background-position: center; height: 200px;"></header>"""
 
             # 构建今日财经新闻
+            _news_raw = generate_news_content('news').replace('\n', '<br>')
             content_news = f"""<h3 style="color: #333; font-weight: bold; margin: 0 0 10px 0;">◆ 今日财经新闻</h3>
-<p>{generate_news_content('news').replace('\n', '<br>')}</p>"""
+            <p>{_news_raw}</p>"""
             
             
 
