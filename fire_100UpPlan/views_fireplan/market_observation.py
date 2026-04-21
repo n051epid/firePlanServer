@@ -22,6 +22,7 @@ from django.http import JsonResponse
 from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
+from fire_100UpPlan.utils import error_response
 
 import threading
 import os
@@ -970,10 +971,7 @@ class KimiChatView(View):
             messages = data.get("messages", [])
             
             if not messages:
-                return JsonResponse(
-                    {"error": "Messages are required"}, 
-                    status=400
-                )
+                return error_response(1, "Messages are required")
 
             response = StreamingHttpResponse(
                 self.chat_with_kimi(messages),  # 传递消息列表
@@ -985,5 +983,5 @@ class KimiChatView(View):
             return response
             
         except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
+            return error_response(1, "Invalid JSON", 400)
 

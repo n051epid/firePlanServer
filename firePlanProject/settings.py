@@ -127,7 +127,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    # 'django.middleware.csrf.CsrfViewMiddleware',
+'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -191,12 +191,32 @@ PAYPAL_API_BASE = PAYPAL_ENDPOINTS[PAYPAL_MODE]
 # Database
 # https://docs.djangoproject.com/en/3.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Production detection: use PostgreSQL if DATABASE_URL is set or SERVER_MODE is 'release'
+# For development (testing), fallback to SQLite
+import dj_database_url
+
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    # Production: Use DATABASE_URL (PostgreSQL, MySQL, etc.)
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
     }
-}
+    # Ensure the ENGINE is set correctly for PostgreSQL
+    DATABASES['default']['ENGINE'] = 'django.db.backends.postgresql'
+else:
+    # Development: Use SQLite (default)
+    if SERVER_MODE == 'release':
+        logger.warning(
+            "SERVER_MODE is 'release' but DATABASE_URL is not set. "
+            "Falling back to SQLite. Set DATABASE_URL for production!"
+        )
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -374,42 +394,39 @@ if CELERY_BEAT_HOURS:
         CELERY_BEAT_HOURS = '19'  # 使用默认值
 
 CELERY_BEAT_SCHEDULE = {
+    # 任务已重新分配执行时间，避免同时执行造成数据库连接池耗尽
+    # 时间间隔从5分钟调整为更均匀的分布（10-20分钟间隔）
     'fetch-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_index_data',
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=5, day_of_week='1-5'),  # 每天19:05执行，仅周一到周五
     },
     'fetch-margin-trading-data': {
         'task': 'fire_100UpPlan.tasks.fetch_margin_trading_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=10, day_of_week='1-5'),  # 每天19:10执行，仅周一到周五
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=20, day_of_week='1-5'),  # 每天19:20执行（从19:10调整），仅周一到周五
     },
     'fetch-industry-valuation-data': {
         'task': 'fire_100UpPlan.tasks.fetch_industry_valuation_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=15, day_of_week='1-5'),  # 每天19:15执行，仅周一到周五
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=35, day_of_week='1-5'),  # 每天19:35执行（从19:15调整），仅周一到周五
     },
     'fetch-convertible-bond-data': {
         'task': 'fire_100UpPlan.tasks.fetch_convertible_bond_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=20, day_of_week='1-5'),  # 每天19:20执行，仅周一到周五
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=50, day_of_week='1-5'),  # 每天19:50执行（从19:20调整），仅周一到周五
     },
     'fetch-bond-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bond_index_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=25, day_of_week='1-5'),  # 每天19:25执行，仅周一到周五
+        'schedule': crontab(hour=int(CELERY_BEAT_HOURS)+1, minute=5, day_of_week='1-5'),  # 每天20:05执行（从19:25调整），仅周一到周五
     },
     'fetch-bigdata-strategy-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bigdata_strategy_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=30, day_of_week='5'),  # 每天19:30执行，仅周五
+        'schedule': crontab(hour=int(CELERY_BEAT_HOURS)+1, minute=20, day_of_week='1-5'),  # 每天20:20执行（从19:30调整），仅周一到周五
     },
     'fetch-daily-market-data': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=35, day_of_week='1-5'),  # 每天19:35执行，仅周一到周五
+        'schedule': crontab(hour=int(CELERY_BEAT_HOURS)+1, minute=35, day_of_week='1-5'),  # 每天20:35执行（从19:35调整），仅周一到周五
     },
     'refresh-database-cache': {
         'task': 'fire_100UpPlan.tasks.refresh_database_cache',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=40, day_of_week='1-5'),  # 每天19:40执行，仅周一到周五
-    },
-    'generate-daily-article': {
-        # cSpell:ignore weixin
-        'task': 'weixin_offiaccount.tasks.generate_daily_article',  # weixin = 微信 (WeChat)
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=45, day_of_week='sunday'),  # 每周日指定时间执行
+        'schedule': crontab(hour=int(CELERY_BEAT_HOURS)+1, minute=50, day_of_week='1-5'),  # 每天20:50执行（从19:40调整），仅周一到周五
     },
     'fetch-daily-market-data2': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',

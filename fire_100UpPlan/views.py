@@ -1,6 +1,7 @@
 from rest_framework import viewsets, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from .models import Membership, MembershipType
 from .serializers import MembershipSerializer
 from rest_framework.permissions import IsAuthenticated
@@ -12,7 +13,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 import requests
 from django.conf import settings
-from .utils import verify_paypal_webhook
+from .utils import verify_paypal_webhook, error_response
 import paypalrestsdk
 from .models import MembershipType, Membership, MembershipPurchase
 from rest_framework import generics
@@ -21,7 +22,8 @@ from django.http import HttpResponse
 import json
 from django.http import JsonResponse
 import logging
-from django.db import transaction
+from django.db import IntegrityError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.urls import reverse
@@ -92,7 +94,7 @@ class UserAuthCodesView(APIView):
             }
             return Response(response)
             
-        except Exception as e:
+        except (AttributeError, TypeError) as e:
             error_response = {
                 "code": 1,
                 "data": None,
@@ -124,6 +126,7 @@ class UserLogoutView(APIView):
 class RegisterView(APIView):
     authentication_classes = []  # 禁用认证
     permission_classes = []  # 禁用限检查
+    throttle_classes = [AnonRateThrottle]
 
     def post(self, request):
         username = request.data.get('username')
@@ -199,7 +202,22 @@ class RegisterView(APIView):
                 "error": None
             }, status=status.HTTP_201_CREATED)
         
+        except ValidationError as e:
+            return Response({
+                "code": 1,
+                "data": None,
+                "error": str(e),
+                "message": "Registration Failed"
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except IntegrityError as e:
+            return Response({
+                "code": 1,
+                "data": None,
+                "error": "Username or email already exists",
+                "message": "Registration Failed"
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            logger.error(f"Register error: {e}")
             return Response({
                 "code": 1,
                 "data": None,
@@ -275,29 +293,20 @@ class UserInfoView(APIView):
             end_date = None
             is_active = False
 
-        try:
-            response = {
-                "code": 0,
-                "data": {
-                    "username": user.username,
-                    "realName": user.username.split('@')[0],
-                    "roles": list(user.groups.all().values_list('name', flat=True)),
-                    "membership_type": membership_type,
-                    "membership_end_date": end_date.isoformat() if end_date else None,
-                    "is_membership_active": is_active
-                },
-                "error": None,
-                "message": "Success"
-            }
-            return Response(response)
-        except Exception as e:
-            error_response = {
-                "code": 1,
-                "data": None,
-                "error": str(e),
-                "message": "Get User Info Failed"
-            }
-            return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        response = {
+            "code": 0,
+            "data": {
+                "username": user.username,
+                "realName": user.username.split('@')[0],
+                "roles": list(user.groups.all().values_list('name', flat=True)),
+                "membership_type": membership_type,
+                "membership_end_date": end_date.isoformat() if end_date else None,
+                "is_membership_active": is_active
+            },
+            "error": None,
+            "message": "Success"
+        }
+        return Response(response)
 
 # 会员功能视图
 class BasicFeatureView(APIView):
@@ -339,7 +348,7 @@ class MinimaxT2AView(APIView):
 
         # 检查必要参数
         if not text:
-            return Response({'error': 'Text is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(1, 'Text is required')
 
         # 构建完整的请求数据
         data = {
@@ -385,7 +394,7 @@ class CreatePayPalOrderView(APIView):
         try:
             membership_type = MembershipType.objects.get(id=membership_type_id)
         except MembershipType.DoesNotExist:
-            return Response({"error": "Invalid membership type"}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(1, "Invalid membership type")
 
         payment = paypalrestsdk.Payment({
             "intent": "sale",
@@ -433,7 +442,7 @@ class CreatePayPalOrderView(APIView):
                         # "purchase_id": purchase.id
                     })
         else:
-            return Response({"error": payment.error}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(1, payment.error, 400)
 
 
 
@@ -497,20 +506,19 @@ class CapturePayPalOrderView(APIView):
                     }, status=status.HTTP_200_OK)
                 else:
                     logger.error(f"Payment execution failed: {payment.error}")
-                    return Response({
-                        "error": "Payment execution failed",
-                        "payment_status": payment.state,
-                        "details": payment.error
-                    }, status=status.HTTP_400_BAD_REQUEST)
+                    return error_response(1, "Payment execution failed", 400)
         except MembershipPurchase.DoesNotExist:
             logger.error(f"Invalid payment ID: {payment_id}")
-            return Response({"error": "Invalid payment ID"}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(1, "Invalid payment ID", 404)
         except paypalrestsdk.ResourceNotFound:
             logger.error(f"Payment not found on PayPal: {payment_id}")
-            return Response({"error": "Payment not found"}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(1, "Payment not found", 404)
+        except (ValidationError, IntegrityError) as e:
+            logger.error(f"Validation or database error capturing payment: {payment_id}")
+            return error_response(1, str(e), 400)
         except Exception as e:
             logger.exception(f"Error capturing payment: {payment_id}")
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(1, str(e), 500)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -553,6 +561,9 @@ class PayPalWebhookView(APIView):
         except json.JSONDecodeError:
             logger.error("Failed to decode JSON payload")
             return HttpResponse("Invalid JSON", status=400)
+        except (KeyError, ValueError, TypeError) as e:
+            logger.error(f"Invalid payload format: {str(e)}")
+            return HttpResponse("Invalid payload", status=400)
         except Exception as e:
             logger.error(f"Unexpected error in webhook processing: {str(e)}")
             return HttpResponse("Internal server error", status=500)
@@ -635,9 +646,11 @@ class CheckPaymentStatusView(APIView):
             else:
                 return Response({'status': 'server_pending', 'state': payment.state, 'payment_id': payment_id})
         except paypalrestsdk.ResourceNotFound:
-            return Response({'error': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
+            return error_response(1, 'Payment not found', 404)
+        except (KeyError, ValueError) as e:
+            return error_response(1, f'Invalid payment data: {str(e)}', 400)
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(1, str(e), 500)
 
 
 class PurchaseHistoryView(APIView):
@@ -661,6 +674,8 @@ class PaymentSuccessView(APIView):
             else:
                 # 支付执行失败，返回错误信息
                 return render(request, 'payment_error.html', {'error': "payment failed"}, status=status.HTTP_400_BAD_REQUEST)
+        except paypalrestsdk.ResourceNotFound:
+            return render(request, 'payment_error.html', {'error': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             # 处理异常情况
             return render(request, 'payment_error.html', {'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -707,9 +722,12 @@ class GoogleLogin(SocialLoginView):
             
             logger.info(f"Google login response: {response.data}")
             return response
+        except (ValidationError, IntegrityError, ObjectDoesNotExist) as e:
+            logger.error(f"Google login error: {str(e)}", exc_info=True)
+            return error_response(1, str(e), 400)
         except Exception as e:
             logger.error(f"Google login error: {str(e)}", exc_info=True)
-            return Response({"error": str(e), "details": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return error_response(1, str(e), 500)
 
     def register_new_user(self, user, extra_data):
         try:
@@ -730,6 +748,10 @@ class GoogleLogin(SocialLoginView):
             send_notification_email.delay(subject, message, from_email, recipient_list, bcc_list)
 
             logger.info(f"New user registered via Google: {user.email}")
+        except IntegrityError as e:
+            logger.error(f"Database integrity error for Google user: {str(e)}", exc_info=True)
+        except ObjectDoesNotExist as e:
+            logger.error(f"Related object not found for Google user: {str(e)}", exc_info=True)
         except Exception as e:
             logger.error(f"Error registering new Google user: {str(e)}", exc_info=True)
 
@@ -739,10 +761,7 @@ class ForgetPasswordView(APIView):
     def post(self, request):
         email = request.data.get('email')
         if not email:
-            return Response(
-                {'error': 'please provide email address'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return error_response(1, 'please provide email address', 400)
             
         try:
             user = User.objects.get(email=email)
