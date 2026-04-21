@@ -458,15 +458,15 @@ class MarketDataFetcher:
                         twelve_years_ago = current_date - pd.DateOffset(years=12)
                         
                         # 添加数据验证
-                        dates = pd.to_datetime(sh_pe['日期'])
-                        latest_12_sh_pe_valuation = sh_pe[dates >= twelve_years_ago]
+                        dates = pd.to_datetime(sh_pe['日期'], errors='coerce')
+                        latest_12_sh_pe_valuation = sh_pe[dates.notna() & (dates >= twelve_years_ago)]
                         if latest_12_sh_pe_valuation.empty:
                             return {
                                 'status': 'error',
                                 'message': 'No PE data found for the last 12 years'
                             }
-                        dates = pd.to_datetime(sh_pb['日期'])
-                        latest_12_sh_pb_valuation = sh_pb[dates >= twelve_years_ago]
+                        dates = pd.to_datetime(sh_pb['日期'], errors='coerce')
+                        latest_12_sh_pb_valuation = sh_pb[dates.notna() & (dates >= twelve_years_ago)]
                         if latest_12_sh_pb_valuation.empty:
                             return {
                                 'status': 'error',
