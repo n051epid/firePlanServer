@@ -4,8 +4,14 @@ from django.core.cache import cache
 from django.conf import settings
 import json
 import logging
+from rest_framework.response import Response
 
 logger = logging.getLogger(__name__)
+
+
+def error_response(code: int, message: str, status_code: int = 400):
+    """统一错误响应格式"""
+    return Response({"code": code, "message": message}, status=status_code)
 
 class WeChatAccessToken:
     def __init__(self,appid,secret):

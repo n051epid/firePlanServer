@@ -394,37 +394,39 @@ if CELERY_BEAT_HOURS:
         CELERY_BEAT_HOURS = '19'  # 使用默认值
 
 CELERY_BEAT_SCHEDULE = {
+    # 任务已重新分配执行时间，避免同时执行造成数据库连接池耗尽
+    # 时间间隔从5分钟调整为更均匀的分布（10-20分钟间隔）
     'fetch-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_index_data',
         'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=5, day_of_week='1-5'),  # 每天19:05执行，仅周一到周五
     },
     'fetch-margin-trading-data': {
         'task': 'fire_100UpPlan.tasks.fetch_margin_trading_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=10, day_of_week='1-5'),  # 每天19:10执行，仅周一到周五
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=20, day_of_week='1-5'),  # 每天19:20执行（从19:10调整），仅周一到周五
     },
     'fetch-industry-valuation-data': {
         'task': 'fire_100UpPlan.tasks.fetch_industry_valuation_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=15, day_of_week='1-5'),  # 每天19:15执行，仅周一到周五
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=35, day_of_week='1-5'),  # 每天19:35执行（从19:15调整），仅周一到周五
     },
     'fetch-convertible-bond-data': {
         'task': 'fire_100UpPlan.tasks.fetch_convertible_bond_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=20, day_of_week='1-5'),  # 每天19:20执行，仅周一到周五
+        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=50, day_of_week='1-5'),  # 每天19:50执行（从19:20调整），仅周一到周五
     },
     'fetch-bond-index-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bond_index_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=25, day_of_week='1-5'),  # 每天19:25执行，仅周一到周五
+        'schedule': crontab(hour=int(CELERY_BEAT_HOURS)+1, minute=5, day_of_week='1-5'),  # 每天20:05执行（从19:25调整），仅周一到周五
     },
     'fetch-bigdata-strategy-data': {
         'task': 'fire_100UpPlan.tasks.fetch_bigdata_strategy_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=30, day_of_week='1-5'),  # 每天19:30执行，仅周一到周五
+        'schedule': crontab(hour=int(CELERY_BEAT_HOURS)+1, minute=20, day_of_week='1-5'),  # 每天20:20执行（从19:30调整），仅周一到周五
     },
     'fetch-daily-market-data': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=35, day_of_week='1-5'),  # 每天19:35执行，仅周一到周五
+        'schedule': crontab(hour=int(CELERY_BEAT_HOURS)+1, minute=35, day_of_week='1-5'),  # 每天20:35执行（从19:35调整），仅周一到周五
     },
     'refresh-database-cache': {
         'task': 'fire_100UpPlan.tasks.refresh_database_cache',
-        'schedule': crontab(hour=CELERY_BEAT_HOURS, minute=40, day_of_week='1-5'),  # 每天19:40执行，仅周一到周五
+        'schedule': crontab(hour=int(CELERY_BEAT_HOURS)+1, minute=50, day_of_week='1-5'),  # 每天20:50执行（从19:40调整），仅周一到周五
     },
     'fetch-daily-market-data2': {
         'task': 'fire_100UpPlan.tasks.fetch_daily_market_data',

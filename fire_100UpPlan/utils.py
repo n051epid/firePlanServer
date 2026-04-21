@@ -2,8 +2,14 @@ import requests
 from django.conf import settings
 import json
 import logging
+from rest_framework.response import Response
 
 logger = logging.getLogger(__name__)
+
+
+def error_response(code: int, message: str, status_code: int = 400):
+    """统一错误响应格式"""
+    return Response({"code": code, "message": message}, status=status_code)
 
 def verify_paypal_webhook(transmission_id, timestamp, webhook_signature, event_body):
     logger.info(f"Verifying webhook: {transmission_id}, {timestamp}")

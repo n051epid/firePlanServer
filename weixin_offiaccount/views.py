@@ -20,7 +20,7 @@ import random
 import string
 from fire_100UpPlan.models import Membership, MembershipType
 from fire_100UpPlan.views_fireplan.market_observation import MarketValuationView,ConvertibleBondMarketDataView
-from .utils import wechat_token_qinglv, wechat_token_black13eard, sync_to_wechat_draft
+from .utils import wechat_token_qinglv, wechat_token_black13eard, sync_to_wechat_draft, error_response
 from datetime import datetime
 import html
 from django.http import StreamingHttpResponse
@@ -111,10 +111,7 @@ class KimiChatView(APIView):
             messages = request.data.get("messages", [])
             
             if not messages:
-                return Response(
-                    {"error": "Messages are required"}, 
-                    status=400
-                )
+                return error_response(1, "Messages are required")
 
             # 获取生成的内容
             content = ""
@@ -126,7 +123,7 @@ class KimiChatView(APIView):
             
         except Exception as e:
             logger.error(f"Error in KimiChatView: {str(e)}")
-            return Response({"error": "Internal server error"}, status=500)
+            return error_response(1, "Internal server error", 500)
         
 
 class WeChatAPIView(APIView):
