@@ -131,18 +131,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install lint tools
-        run: |
-          pip install flake8 flake8-blind-except flake8-bugbear flake8-comprehensions flake8-errmsg flake8-import-order flake8-quotes flake8-use-fstring ruff
+      - name: Install ruff
+        run: pip install ruff
 
-      - name: Run flake8
-        run: |
-          flake8 fire_100UpPlan/ \
-            --max-line-length=120 \
-            --exclude=migrations,__pycache__,node_modules \
-            --ignore=E501,F401,W503,E402
-
-      - name: Run ruff (fast linter)
+      - name: Run ruff (lint + auto-fix)
         run: |
           ruff check fire_100UpPlan/ \
             --exclude=migrations,__pycache__ \
