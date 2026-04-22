@@ -1,0 +1,250 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+env:
+  DJANGO_SETTINGS_MODULE: firePlanProject.settings
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Job 1: Unit Tests
+  # ─────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-django pytest-xdist pytest-timeout pytest-mock coverage
+
+      - name: Run unit tests
+        run: |
+          pytest fire_100UpPlan/tests/ \
+            --ignore=fire_100UpPlan/tests/integration \
+            --ignore=fire_100UpPlan/tests/e2e \
+            --ignore=fire_100UpPlan/tests/performance \
+            -v --tb=short \
+            --cov=fire_100UpPlan \
+            --cov-report=term-missing \
+            --cov-fail-under=60
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: .coverage
+          retention-days: 7
+
+  # ─────────────────────────────────────────────
+  # Job 2: Integration Tests
+  # ─────────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: fireplan_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-django pytest-timeout pytest-mock coverage
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/fireplan_test
+          CELERY_BROKER_URL: redis://localhost:6379/0
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          pytest fire_100UpPlan/tests/integration/ \
+            -v --tb=short \
+            --cov=fire_100UpPlan \
+            --cov-report=term-missing \
+            --cov-fail-under=40
+
+  # ─────────────────────────────────────────────
+  # Job 3: Lint & Code Quality
+  # ─────────────────────────────────────────────
+  lint:
+    name: Lint & Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install lint tools
+        run: |
+          pip install flake8 flake8-blind-except flake8-bugbear flake8-comprehensions flake8-errmsg flake8-import-order flake8-quotes flake8-use-fstring ruff
+
+      - name: Run flake8
+        run: |
+          flake8 fire_100UpPlan/ \
+            --max-line-length=120 \
+            --exclude=migrations,__pycache__,node_modules \
+            --ignore=E501,F401,W503,E402
+
+      - name: Run ruff (fast linter)
+        run: |
+          ruff check fire_100UpPlan/ \
+            --exclude=migrations,__pycache__ \
+            --fix --exit-non-zero-on-fix
+
+  # ─────────────────────────────────────────────
+  # Job 4: E2E Tests (Playwright)
+  # ─────────────────────────────────────────────
+  e2e-tests:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    if: false  # Enable when E2E tests are ready
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright
+        run: |
+          cd vue-vben-admin
+          pnpm install --frozen-lockfile
+          npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: |
+          cd vue-vben-admin
+          npx playwright test \
+            --reporter=html \
+            --config=playwright.config.ts
+
+      - name: Upload E2E report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: vue-vben-admin/playwright-report/
+          retention-days: 7
+
+  # ─────────────────────────────────────────────
+  # Job 5: Security Scan
+  # ─────────────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: |
+          pip install pip-audit safety bandit
+
+      - name: Run pip-audit
+        run: |
+          pip-audit --requirement=requirements.txt --format=json --output=pip-audit.json || true
+
+      - name: Run safety check
+        run: |
+          safety check --requirements=requirements.txt --json --output=safety.json || true
+
+      - name: Run Bandit
+        run: |
+          bandit -r fire_100UpPlan/ -f json --output=bandit.json || true
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            pip-audit.json
+            safety.json
+            bandit.json
+          retention-days: 14
+
+  # ─────────────────────────────────────────────
+  # Job 6: Summary & Coverage Merge
+  # ─────────────────────────────────────────────
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, lint]
+    if: always()
+
+    steps:
+      - name: Download all coverage reports
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-reports
+
+      - name: Display summary
+        run: |
+          echo "## CI Results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Unit Tests: ${{ needs.unit-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Integration Tests: ${{ needs.integration-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Lint: ${{ needs.lint.result }}" >> $GITHUB_STEP_SUMMARY
