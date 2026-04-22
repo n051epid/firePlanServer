@@ -16,8 +16,8 @@ class Command(BaseCommand):
             
             # 创建事件循环并运行任务
             loop = asyncio.get_event_loop()
-            result = loop.run_until_complete(async_task())
-            
+            loop.run_until_complete(async_task())
+
             logger.info("数据采集成功")
             
         except Exception as e:

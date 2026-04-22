@@ -117,14 +117,14 @@ class ProxyManager:
                 attempts += 1
                 if attempts >= max_retries:
                     # 最后尝试直连
-                    logger.warning(f"ProxyManager: 代理全部失败，尝试直连")
+                    logger.warning("ProxyManager: 代理全部失败，尝试直连")
                     try:
                         kwargs.pop('proxies', None)
                         if method.lower() == 'get':
                             return self._original_get(url, **kwargs)
                         else:
                             return self._original_post(url, **kwargs)
-                    except:
+                    except Exception:
                         raise
                 else:
                     logger.warning(f"ProxyManager: 代理 {proxy_url} 失败，切换下一个: {e}")
@@ -348,26 +348,26 @@ class MarketDataFetcher:
                     return data
                 except Exception as e:
                     logger.error(f"get_stock_market_pe Error: {e}")
-                    logger.info(f"Restart celery service")
+                    logger.info("Restart celery service")
                     # 重启celery服务：sudo systemctl restart celery_worker_fireplan.service
                     if os.environ.get('SERVER_MODE') == 'release':
                         os.system('sudo systemctl restart celery_worker_fireplan_release.service')
                     else:
                         os.system('sudo systemctl restart celery_worker_fireplan.service')
-                    raise Exception(f"Failed to fetch data,restart celery service")
+                    raise Exception("Failed to fetch data,restart celery service")
             elif px == 'pb':
                 try:
                     data = ak_with_fallback(ak.stock_market_pb_lg, symbol=symbol, aktools_func=_aktools_stock_zh_a_pb)
                     return data
                 except Exception as e:
                     logger.error(f"get_stock_market_pb Error: {e}")
-                    logger.info(f"Restart celery service")
+                    logger.info("Restart celery service")
                     # 重启celery服务：sudo systemctl restart celery_worker_fireplan.service
                     if os.environ.get('SERVER_MODE') == 'release':
                         os.system('sudo systemctl restart celery_worker_fireplan_release.service')
                     else:
                         os.system('sudo systemctl restart celery_worker_fireplan.service')
-                    raise Exception(f"Failed to fetch data,restart celery service")
+                    raise Exception("Failed to fetch data,restart celery service")
 
         # 获取上证指数估值数据
         try:
@@ -443,7 +443,7 @@ class MarketDataFetcher:
                         # 验证当天是否有上证指数数据
                         try:
                             today_date = pd.to_datetime(today, format='%Y%m%d').date()
-                        except:
+                        except Exception:
                             # 如果转换失败，尝试其他格式
                             today_date = pd.to_datetime(today).date()
                         
@@ -1162,7 +1162,7 @@ class MarketDataFetcher:
 
                 return bigdata_score
             
-            except Exception as e:
+            except Exception:
                 return 0
         else:
             return 0
@@ -1289,7 +1289,8 @@ class MarketDataFetcher:
             logger.info(f"Fetcher: 符合大数投资策略的股票数量: {len(stocks)}")
 
             # 使用企业所属行业的估值中位数作为筛选条件，以便适应个行业的不同特性
-            stocks_industry_valuation = StockData.objects.filter(
+            # (query constructed but result not used - kept for future reference)
+            StockData.objects.filter(
                 pe_ttm_ratio__lt=F('parent_industry_pe_ttm_ratio_median'),
                 pb_ratio__lt=F('parent_industry_pb_ratio_median'),
                 total_market_value__gt=300000000,
@@ -1346,7 +1347,7 @@ class MarketDataFetcher:
                         ).order_by('-date')
                         
                         if existing_data.exists():
-                            logger.info(f"有本地数据，从StockData中获取最新close数据")
+                            logger.info("有本地数据，从StockData中获取最新close数据")
                             # StockHistoryData中有数据，则从StockData中获取code对应的最新close数据
                             # 如果close数据和本地最新数据是同一个月，则更新本地数据
                             # 如果close数据和本地最新数据不是同一个月，则在StockHistoryData中新增一条数据
@@ -1391,7 +1392,7 @@ class MarketDataFetcher:
                             one_year_increase = (stock.close - one_year_min) / one_year_min * 100 if one_year_min else None
                         else:
                             # 没有本地数据，从网络获取并保存
-                            logger.info(f"没有本地数据，获取最新数据")
+                            logger.info("没有本地数据，获取最新数据")
                             hist_df = MarketDataFetcher.fetch_and_save_stock_history_data(
                                 stock, start_date, end_date, date_format
                             )
@@ -1491,7 +1492,7 @@ class MarketDataFetcher:
                     # 数据库为空，回退到最近10天
                     end_date = datetime.now().strftime('%Y%m%d')
                     start_date = (datetime.now() - timedelta(days=10)).strftime('%Y%m%d')
-                    logger.info(f"Index data: DB empty, fetching last 10 days")
+                    logger.info("Index data: DB empty, fetching last 10 days")
 
             # 从数据库获取所有指数
             main_indices = IndexData.objects.values_list('code', flat=True).distinct().order_by('code')
@@ -1691,7 +1692,7 @@ class ConvertibleBondMarketDataFetcher:
         try:
             # 获取可转债指数数据
             bond_index_df = ak.bond_cb_index_jsl()
-            logger.info(f"获取到可转债指数数据")
+            logger.info("获取到可转债指数数据")
             
             if bond_index_df.empty:
                 return {
@@ -1810,7 +1811,7 @@ class ConvertibleBondMarketDataFetcher:
                             if pd.isna(date_str):
                                 return None
                             return pd.to_datetime(date_str).date()
-                        except:
+                        except Exception:
                             return None
 
                     # 从主数据获取基本信息
@@ -1949,7 +1950,7 @@ class ConvertibleBondMarketDataFetcher:
                             if pd.isna(date_str):
                                 return None
                             return pd.to_datetime(date_str).date()
-                        except:
+                        except Exception:
                             return None
 
                     # 从主数据获取基本信息

@@ -247,7 +247,7 @@ class ProxyAdapter(requests.adapters.HTTPAdapter):
                 try:
                     response = super().send(request, **kwargs)
                     return response
-                except:
+                except Exception:
                     pass
             
             raise
@@ -315,7 +315,7 @@ class AkshareProxyPatcher:
                 if proxy_url:
                     proxy_manager.mark_success(proxy_url)
                 return response
-            except requests.exceptions.RequestException as e:
+            except requests.exceptions.RequestException:
                 if proxy_url:
                     proxy_manager.mark_fail(proxy_url)
                 raise
@@ -334,7 +334,7 @@ class AkshareProxyPatcher:
                 if proxy_url:
                     proxy_manager.mark_success(proxy_url)
                 return response
-            except requests.exceptions.RequestException as e:
+            except requests.exceptions.RequestException:
                 if proxy_url:
                     proxy_manager.mark_fail(proxy_url)
                 raise

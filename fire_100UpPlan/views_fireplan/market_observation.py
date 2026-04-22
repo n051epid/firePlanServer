@@ -1,6 +1,5 @@
 import akshare as ak
 import pandas as pd
-import numpy as np
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -8,17 +7,14 @@ from datetime import datetime, timedelta
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.db import models
 from fire_100UpPlan.models import MarketValuation, IndexData, MarginTradingData, IndustryValuation, BondIndexData, BondData, BigDataStrategyStockData
-from django.db.models import Max
-from django.db.models.functions import ExtractWeekDay
 import logging
 from django.db.models.functions import Extract
 from django.conf import settings
 from openai import OpenAI
 from django.db.models.functions import Cast, Substr
-from django.db.models import IntegerField, DateField, Min, Max, F, Q, Case, When, Value
+from django.db.models import IntegerField, DateField, Case, When, Value
 from django.http import StreamingHttpResponse
 import json
-from django.http import JsonResponse
 from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page
@@ -130,7 +126,6 @@ def _get_aktools_url():
 
 def _aktools_stock_zh_index_daily(symbol):
     """AKTools 指数日线接口"""
-    import pandas as pd
     aktools_url = _get_aktools_url()
     if not aktools_url:
         return None
@@ -141,7 +136,7 @@ def _aktools_stock_zh_index_daily(symbol):
         data = resp.json()
         df = pd.DataFrame(data)
         return df
-    except:
+    except Exception:
         return None
 
 
@@ -161,10 +156,10 @@ def ak_with_fallback(ak_func, *args, aktools_func=None, **kwargs):
             logger.info(f"AKTools: 尝试调用 {aktools_func.__name__}")
             result = aktools_func(*args, **kwargs)
             if result is not None and not (hasattr(result, 'empty') and result.empty):
-                logger.info(f"AKTools: 成功获取数据")
+                logger.info("AKTools: 成功获取数据")
                 return result
             else:
-                logger.warning(f"AKTools: 返回数据为空，尝试下一方案")
+                logger.warning("AKTools: 返回数据为空，尝试下一方案")
         except Exception as e:
             logger.warning(f"AKTools: 调用失败，尝试下一方案: {e}")
     
@@ -317,7 +312,7 @@ class MarketValuationView(APIView):
 
             return result
         
-        except Exception as e:
+        except Exception:
             return []
         
         
@@ -346,7 +341,7 @@ class MarketValuationView(APIView):
             
             return industry_data
         
-        except Exception as e:
+        except Exception:
             return []
     
     def _get_market_sentiment(self):
@@ -532,7 +527,7 @@ class MarketTrendView(APIView):
             
             return sectors
             
-        except Exception as e:
+        except Exception:
             return []
     
     def _get_style_performance(self):
@@ -559,7 +554,7 @@ class MarketTrendView(APIView):
             
             return result
             
-        except Exception as e:
+        except Exception:
             return {}
 
 
@@ -658,7 +653,7 @@ class BigDataInvestmentMarketDataView(APIView):
 
             return bd_index_data
         
-        except Exception as e:
+        except Exception:
             return []
 
     def _get_bigdata_investment_stock_pool(self):
@@ -684,7 +679,7 @@ class BigDataInvestmentMarketDataView(APIView):
 
             return bd_stock_pool
         
-        except Exception as e:
+        except Exception:
             return []
     
 
@@ -771,7 +766,7 @@ class ConvertibleBondMarketDataView(APIView):
             cb_index_data_list[0] = updated_item
 
             return cb_index_data_list
-        except Exception as e:
+        except Exception:
             return []
         
 
@@ -864,7 +859,7 @@ class ConvertibleBondMarketDataView(APIView):
             ).order_by('double_low')[:20]
             
             return list(convertible_bond_data)
-        except Exception as e:
+        except Exception:
             return []
     
     def _get_redemption_convertible_bonds(self):
@@ -902,7 +897,7 @@ class ConvertibleBondMarketDataView(APIView):
             ).order_by('code')
             
             return list(callable_bonds)
-        except Exception as e:
+        except Exception:
             return []
         
 
@@ -954,7 +949,7 @@ class KimiChatView(View):
                                     yield f"data: [搜索结果] {json.dumps(search_results, ensure_ascii=False)}\n\n"
                                 except json.JSONDecodeError as e:
                                     logging.error(f"搜索结果解析失败: {e}")
-                                    yield f"data: [错误] 搜索结果解析失败\n\n"
+                                    yield "data: [错误] 搜索结果解析失败\n\n"
                 except AttributeError as e:
                     logging.error(f"处理响应块时出错: {e}")
                     continue

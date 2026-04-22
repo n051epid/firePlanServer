@@ -60,8 +60,6 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         try:
             data = super().validate(attrs)
-            user = self.user
-            
             # 打印用户所有字段，用于调试
             # logger.info(f"User fields: {user.__dict__}")
 

@@ -4,7 +4,7 @@
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 import pandas as pd
 import akshare as ak
 import logging
@@ -193,7 +193,7 @@ class Command(BaseCommand):
 
                 try:
                     os.remove(xls_path)
-                except:
+                except Exception:
                     pass
 
             # 跳过周末/节假日

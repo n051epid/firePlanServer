@@ -3,9 +3,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from .models import Membership, MembershipType
-from .serializers import MembershipSerializer
+from .serializers import MembershipSerializer, MembershipPurchaseSerializer
 from rest_framework.permissions import IsAuthenticated
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import User
 from .permissions import MembershipPermission
 from rest_framework import status
 from django.utils import timezone
@@ -15,14 +15,13 @@ import requests
 from django.conf import settings
 from .utils import verify_paypal_webhook, error_response
 import paypalrestsdk
-from .models import MembershipType, Membership, MembershipPurchase
-from rest_framework import generics
+from .models import MembershipPurchase
 from .serializers import MembershipTypeSerializer, CustomTokenObtainPairSerializer
 from django.http import HttpResponse
 import json
 from django.http import JsonResponse
 import logging
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
@@ -37,18 +36,10 @@ from allauth.socialaccount.providers.google.views import GoogleOAuth2Adapter
 from allauth.socialaccount.providers.oauth2.client import OAuth2Client
 from dj_rest_auth.registration.views import SocialLoginView
 from django.middleware.csrf import get_token
-import traceback
 from django.views.decorators.csrf import ensure_csrf_cookie
 from allauth.socialaccount.models import SocialAccount
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .serializers import CustomTokenObtainPairSerializer
 from .serializers import UserRegistrationSerializer
-import hashlib
-import random
-import string
-import time
-import xmltodict
-from django.core.cache import cache
 
 
 
@@ -209,7 +200,7 @@ class RegisterView(APIView):
                 "error": str(e),
                 "message": "Registration Failed"
             }, status=status.HTTP_400_BAD_REQUEST)
-        except IntegrityError as e:
+        except IntegrityError:
             return Response({
                 "code": 1,
                 "data": None,
@@ -424,7 +415,7 @@ class CreatePayPalOrderView(APIView):
         })
 
         if payment.create():
-            purchase = MembershipPurchase.objects.create(
+            MembershipPurchase.objects.create(
                 user=request.user,
                 membership_type=membership_type,
                 payment_status='PENDING',
@@ -439,7 +430,6 @@ class CreatePayPalOrderView(APIView):
                     return Response({
                         "approval_url": approval_url,
                         "payment_id": payment.id,
-                        # "purchase_id": purchase.id
                     })
         else:
             return error_response(1, payment.error, 400)
@@ -701,22 +691,21 @@ class GoogleLogin(SocialLoginView):
         try:
             logger.info(f"Received Google login request: {request.data}")
             response = super().post(request, *args, **kwargs)
-            
-            user = self.user
-            if user:
-                social_account = SocialAccount.objects.filter(user=user, provider='google').first()
+
+            if self.user:
+                social_account = SocialAccount.objects.filter(user=self.user, provider='google').first()
                 if social_account:
                     google_account_id = social_account.uid
                     is_new_user = not Membership.objects.filter(user__socialaccount__uid=google_account_id).exists()
                     if is_new_user:
-                        self.register_new_user(user, social_account.extra_data)
+                        self.register_new_user(self.user, social_account.extra_data)
             
             # 生成 JWT 令牌
-            refresh = RefreshToken.for_user(user)
+            refresh = RefreshToken.for_user(self.user)
             response.data = {
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
-                'email': user.email,
+                'email': self.user.email,
                 'is_new_user': is_new_user
             }
             
@@ -741,7 +730,7 @@ class GoogleLogin(SocialLoginView):
 
             # 发送欢迎邮件
             subject = 'Welcome to GuizhenIntel'
-            message = f'Your account has been successfully created, and you have obtained a GuizhenIntel Trial Plan.'
+            message = 'Your account has been successfully created, and you have obtained a GuizhenIntel Trial Plan.'
             from_email = settings.DEFAULT_FROM_EMAIL
             recipient_list = [user.email]
             bcc_list = [settings.BCC_EMAIL]

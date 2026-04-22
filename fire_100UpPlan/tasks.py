@@ -89,13 +89,13 @@ def fetch_index_data(self):
     优化：fetcher 内部自动从 DB 最新日期的下一个交易日开始拉取，
     避免每次都拉最近10天（节省90%的API调用）。
     """
-    logger.info(f"Task: Fetching index data")
+    logger.info("Task: Fetching index data")
     try:
         fetcher = MarketDataFetcher()
         result = fetcher.fetch_index_data()  # 不传日期，由 fetcher 内部自动判断
 
         if result:
-            logger.info(f"指数数据获取成功")
+            logger.info("指数数据获取成功")
             return {
                 'status': 'success',
                 'message': result.get('message', '')
@@ -118,7 +118,7 @@ def fetch_index_data_batch(self, symbol='930903', start_date=None, end_date=None
        from fire_100UpPlan.tasks import fetch_index_data_batch
        result = fetch_index_data_batch('000991','20120101','20241116')
     """
-    logger.info(f"Task: Fetching index data batch")
+    logger.info("Task: Fetching index data batch")
     try:
         # 自动计算日期范围（比如获取最近10个交易日的数据）
         if not start_date or not end_date:
@@ -151,13 +151,13 @@ def fetch_index_data_batch(self, symbol='930903', start_date=None, end_date=None
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_margin_trading_data(self):
     """两融数据采集任务"""
-    logger.info(f"Task: Fetching margin trading data")
+    logger.info("Task: Fetching margin trading data")
     try:
         fetcher = MarketDataFetcher()
         result = fetcher.fetch_margin_trading_data()
 
         if result:
-            logger.info(f"两融数据获取成功")
+            logger.info("两融数据获取成功")
             return {'status': 'success'}
         
         try:
@@ -177,7 +177,7 @@ def fetch_industry_valuation_data(self, start_date=None, end_date=None):
        from fire_100UpPlan.tasks import fetch_industry_valuation_data
        result = fetch_industry_valuation_data('20251212','20251212')
     """
-    logger.info(f"Task: Fetching industry valuation data")
+    logger.info("Task: Fetching industry valuation data")
     try:
         fetcher = MarketDataFetcher()
         
@@ -242,13 +242,13 @@ def fetch_industry_valuation_data(self, start_date=None, end_date=None):
 @shared_task(bind=True, max_retries=3, default_retry_delay=3600)
 def fetch_bigdata_strategy_data(self):
     """大数投资策略数据采集任务"""
-    logger.info(f"Task: Fetching bigdata strategy data")
+    logger.info("Task: Fetching bigdata strategy data")
     try:
         fetcher = MarketDataFetcher()
         result = fetcher.fetch_bigdata_strategy_data()
 
         if result:
-            logger.info(f"Task: 大数投资策略数据获取成功")
+            logger.info("Task: 大数投资策略数据获取成功")
             return {'status': result['status'], 'message': result['message']}
         
     except Exception as e:
@@ -261,7 +261,7 @@ def fetch_bigdata_strategy_data(self):
 @shared_task(bind=True, max_retries=3, default_retry_delay=3600)
 def fetch_convertible_bond_data(self):
     """可转债数据采集任务"""
-    logger.info(f"Task: Fetching convertible bond data")
+    logger.info("Task: Fetching convertible bond data")
     
     try:
         fetcher = ConvertibleBondMarketDataFetcher()
@@ -283,13 +283,13 @@ def fetch_convertible_bond_data(self):
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def fetch_bond_index_data(self):
     """可转债指数数据采集任务"""
-    logger.info(f"Task: Fetching bond index data")
+    logger.info("Task: Fetching bond index data")
     try:
         fetcher = ConvertibleBondMarketDataFetcher()
         result = fetcher.fetch_bond_index_data()
 
         if result:
-            logger.info(f"可转债指数数据获取成功")
+            logger.info("可转债指数数据获取成功")
             return {'status': 'success'}
 
     except Exception as e:
@@ -303,13 +303,13 @@ def fetch_bond_index_data(self):
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def refresh_database_cache(self):
     """刷新数据库缓存"""
-    logger.info(f"Task: Refreshing database cache")
+    logger.info("Task: Refreshing database cache")
     try:
         fetcher = RefreshDatabaseCache()
         result = fetcher.refresh_database_cache()
 
         if result:
-            logger.info(f"数据库缓存刷新成功")
+            logger.info("数据库缓存刷新成功")
             return {'status': 'success'}
         
     except Exception as e:

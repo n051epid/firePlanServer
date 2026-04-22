@@ -2,7 +2,6 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 import datetime
-from datetime import timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -66,6 +65,8 @@ class MembershipPurchase(models.Model):
         else:
             self.amount_paid = self.membership_type.price  # 使用会员类型的价格作为默认值
         self.save()
+        # avoid circular import: update_membership is defined in views.py
+        from fire_100UpPlan.views import update_membership
         return update_membership(self.user, self.membership_type)
 
     def mark_as_refund_pending(self):
