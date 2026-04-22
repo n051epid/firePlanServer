@@ -10,6 +10,7 @@ on:
 env:
   DJANGO_SETTINGS_MODULE: firePlanProject.settings
   PYTHON_VERSION: '3.11'
+  SERVER_MODE: testing
 
 jobs:
   # ─────────────────────────────────────────────
